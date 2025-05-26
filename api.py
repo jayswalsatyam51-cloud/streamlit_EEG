@@ -1,5 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 import os
 import shutil
 from typing import List
@@ -13,6 +13,7 @@ from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import glob
 import numpy as np
+import zipfile
 
 # Import the extraction functions from pdf_extraction.py
 from pdf_extraction import extract_coherence_phase_lag, extract_other_sections, merge_data, save_to_csv
@@ -84,17 +85,21 @@ async def extract_data(
                 str(doc_output_path)
             )
             
-            # Prepare response
-            response = {
-                "status": "success",
-                "message": "Data extracted and processed successfully",
-                "output_files": {
-                    "csv_directory": str(output_dir),
-                    "combined_document": str(doc_output_path)
-                }
-            }
+            # Zip the output directory
+            zip_path = str(output_dir) + ".zip"
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(output_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, start=output_dir)
+                        zipf.write(file_path, arcname)
             
-            return JSONResponse(content=response)
+            # Return the zip file as a download
+            return FileResponse(
+                zip_path,
+                filename=os.path.basename(zip_path),
+                media_type='application/zip'
+            )
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -317,6 +322,13 @@ __________________________________________________\n"""
             result_blocks.append(block)
 
     return "\n".join(result_blocks)
+
+@app.get("/download/{timestamp}/{filename}")
+async def download_file(timestamp: str, filename: str):
+    file_path = UPLOAD_DIR / timestamp / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(str(file_path), filename=filename)
 
 if __name__ == "__main__":
     main() 
