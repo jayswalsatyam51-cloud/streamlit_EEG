@@ -6,14 +6,12 @@ from collections import defaultdict
 import time
 import pandas as pd
 import glob
-import re
 
 # Define the bands for each section
 BANDS_MAPPING = {
     "Z Scored FFT Absolute Power": ["DELTA", "THETA", "ALPHA", "BETA", "HIGH BETA", "BETA 1", "BETA 2", "BETA 3"],
     "Z Scored FFT Power Ratio": ["D/T", "D/A", "D/B", "D/G", "T/A", "T/B", "T/G", "A/B", "A/G", "B/G"],
     "Z Scored Peak Frequency": ["DELTA", "THETA", "ALPHA", "BETA", "HIGH BETA", "BETA 1", "BETA 2", "BETA 3"],
-    "Z Scored FFT Peak Frequency": ["DELTA", "THETA", "ALPHA", "BETA", "HIGH BETA", "BETA 1", "BETA 2", "BETA 3"],
     "Z Scored FFT Coherence": ["DELTA", "THETA", "ALPHA", "BETA"],
     "Z Scored FFT Phase Lag": ["DELTA", "THETA", "ALPHA", "BETA"]
 }
@@ -23,7 +21,6 @@ LEFT_CHANNELS = ['FP1 - LE', 'F3 - LE', 'C3 - LE', 'P3 - LE', 'O1 - LE', 'F7 - L
 RIGHT_CHANNELS = ['FP2 - LE', 'F4 - LE', 'C4 - LE', 'P4 - LE', 'O2 - LE', 'F8 - LE', 'T4 - LE', 'T6 - LE']
 CENTER_CHANNELS = ['Fz - LE', 'Cz - LE', 'Pz - LE']
 HOMOLOGOUS_PAIRS = ['FP1 FP2', 'F3 F4', 'C3 C4', 'P3 P4', 'O1 O2', 'F7 F8', 'T3 T4', 'T5 T6']
-ALL_CHANNELS = LEFT_CHANNELS + RIGHT_CHANNELS + CENTER_CHANNELS
 
 def extract_coherence_phase_lag(pdf_paths):
     all_pdfs_data = []
@@ -153,8 +150,7 @@ def extract_other_sections(pdf_paths):
         extracted_data = {
             "Z Scored FFT Absolute Power": [],
             "Z Scored FFT Power Ratio": [],
-            "Z Scored Peak Frequency": [],
-            "Z Scored FFT Peak Frequency": []
+            "Z Scored Peak Frequency": []
         }
         
         with pdfplumber.open(pdf_path) as pdf:
@@ -166,35 +162,37 @@ def extract_other_sections(pdf_paths):
 
                 for line in lines:
                     line = line.strip()
-                    line_lower = line.lower()
-                    # Identify section headers (robust matching)
+                    
+                    # Identify section headers
                     for section in extracted_data.keys():
-                        if section.lower() in line_lower:
+                        if section in line:
                             current_section = section
                             center_section = False
-                            print(f"Detected section: {section} in file {pdf_path}")
                             break
 
                     # Detect CENTER section
-                    if "intrahemispheric: center" in line_lower:
+                    if "Intrahemispheric: CENTER" in line:
                         center_section = True
 
                     # Process data lines
                     if current_section:
                         bands = BANDS_MAPPING[current_section]
-                        # Use ALL_CHANNELS for robust channel detection
-                        if any(channel in line for channel in ALL_CHANNELS):
-                            channel = next(ch for ch in ALL_CHANNELS if ch in line)
+                        
+                        # Handle FP1 - LE, FP2 - LE, and Fz - LE
+                        if any(channel in line for channel in ['FP1 - LE', 'FP2 - LE', 'Fz - LE']):
+                            channel = next(ch for ch in ['FP1 - LE', 'FP2 - LE', 'Fz - LE'] if ch in line)
                             values_str = line[line.find(channel) + len(channel):].strip()
-                            # Use regex split for robust whitespace handling
-                            values = re.split(r'\s+', values_str)
-                            if current_section in ["Z Scored FFT Absolute Power", "Z Scored Peak Frequency", "Z Scored FFT Peak Frequency"]:
+                            values = values_str.split()
+                            
+                            if current_section in ["Z Scored FFT Absolute Power", "Z Scored Peak Frequency"]:
                                 processed_values = []
                                 for v in values:
+                                    v = v.replace('BET', '').replace('BE', '').replace('T0A', '').replace('T1A', '').replace('0A', '')
                                     try:
                                         processed_values.append(float(v))
                                     except ValueError:
                                         continue
+                                
                                 if len(processed_values) == len(bands):
                                     for band, value in zip(bands, processed_values):
                                         extracted_data[current_section].append({
@@ -202,8 +200,7 @@ def extract_other_sections(pdf_paths):
                                             "Band": band,
                                             "Value": value
                                         })
-                                else:
-                                    print(f"Skipped line (wrong number of values): {line} | Got {len(processed_values)} values, expected {len(bands)}")
+                            
                             elif current_section == "Z Scored FFT Power Ratio":
                                 try:
                                     numeric_values = [float(v) for v in values]
@@ -225,6 +222,7 @@ def extract_other_sections(pdf_paths):
                                 channel = f"{parts[0]} - LE"
                                 values_str = line[line.find('- LE') + 4:].strip()
                                 values = values_str.split()
+                                
                                 try:
                                     numeric_values = [float(v) for v in values]
                                     if len(numeric_values) == len(bands):
@@ -238,14 +236,16 @@ def extract_other_sections(pdf_paths):
                                     continue
                             continue
 
-                        # Handle other regular channels (fallback)
+                        # Handle other regular channels
                         parts = line.split()
                         if len(parts) > 1:
                             value_start = 1
                             while value_start < len(parts) and not parts[value_start].replace('.', '').replace('-', '').isdigit():
                                 value_start += 1
+                            
                             channel = ' '.join(parts[:value_start])
                             values = parts[value_start:]
+
                             try:
                                 numeric_values = [float(v) for v in values]
                                 if len(numeric_values) == len(bands):
@@ -257,7 +257,9 @@ def extract_other_sections(pdf_paths):
                                         })
                             except ValueError:
                                 continue
+
         all_pdfs_data.append(extracted_data)
+    
     return all_pdfs_data
 
 def merge_data(all_pdfs_data):

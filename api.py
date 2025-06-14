@@ -141,15 +141,13 @@ def create_combined_document(csv_files, output_path):
     Create a single document combining all CSV files with metrics analysis
     """
     doc = Document()
-
-    # Add custom heading 'EEG // ' at the start
+    # Add custom heading at the top
     eeg_heading = doc.add_paragraph()
-    eeg_run = eeg_heading.add_run("EEG // ")
-    from docx.shared import Pt
-    eeg_run.font.size = Pt(18)
-    eeg_run.bold = True
-
-    doc.add_heading("Band-wise Metrics Analysis", level=1)
+    run = eeg_heading.add_run("EEG//")
+    run.bold = True
+    run.font.size = Pt(18)
+    # Default color (do not set run.font.color)
+    doc.add_heading("Band-wise Metrics Analysis: ", level=1)
 
     # Define the desired order of sections
     section_order = [
@@ -159,21 +157,15 @@ def create_combined_document(csv_files, output_path):
         "Z Scored FFT Coherence",
         "Z Scored FFT Phase Lag"
     ]
-
-    # Map section names to their corresponding csv file
-    section_to_file = {}
-    for csv_file in csv_files:
-        section_name = os.path.basename(csv_file).replace('.csv', '')
-        section_to_file[section_name] = csv_file
-
-    # Add sections in the specified order if present
-    for section_name in section_order:
-        csv_file = section_to_file.get(section_name)
-        if not csv_file:
+    # Map section names to filenames
+    section_to_file = {os.path.basename(f).replace('.csv', ''): f for f in csv_files}
+    # Iterate in the desired order
+    for section in section_order:
+        file_path = section_to_file.get(section)
+        if not file_path:
             continue
-        # Read CSV data
-        df = pd.read_csv(csv_file)
-        # Calculate metrics using existing function
+        section_name = section
+        df = pd.read_csv(file_path)
         metrics_text = compute_subsection_bandwise_metrics(
             df,
             subsection_col="Subsection",
@@ -182,9 +174,7 @@ def create_combined_document(csv_files, output_path):
             set2_col="T2 Z",
             normalize_col="Normalize"
         )
-        # Add section heading
         section_heading = doc.add_heading(section_name, level=2)
-        # Split and format the metrics text blocks
         for block in metrics_text.strip().split("\n Subsection: "):
             if block.strip():
                 if not block.startswith("Subsection:"):
@@ -196,10 +186,7 @@ def create_combined_document(csv_files, output_path):
                 run = para.add_run(f"Subsection: {subsection_title}")
                 run.bold = True
                 doc.add_paragraph(content.strip(), style='Normal')
-        # Add spacing between sections
         doc.add_paragraph()
-
-    # Save the document
     doc.save(output_path)
     print(f"Combined analysis saved to {output_path}")
 
