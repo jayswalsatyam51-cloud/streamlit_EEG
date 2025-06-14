@@ -141,15 +141,38 @@ def create_combined_document(csv_files, output_path):
     Create a single document combining all CSV files with metrics analysis
     """
     doc = Document()
-    doc.add_heading("Subsection & Band-wise Metrics Analysis", level=1)
 
+    # Add custom heading 'EEG // ' at the start
+    eeg_heading = doc.add_paragraph()
+    eeg_run = eeg_heading.add_run("EEG // ")
+    from docx.shared import Pt
+    eeg_run.font.size = Pt(18)
+    eeg_run.bold = True
+
+    doc.add_heading("Band-wise Metrics Analysis", level=1)
+
+    # Define the desired order of sections
+    section_order = [
+        "Z Scored FFT Absolute Power",
+        "Z Scored FFT Power Ratio",
+        "Z Scored Peak Frequency",
+        "Z Scored FFT Coherence",
+        "Z Scored FFT Phase Lag"
+    ]
+
+    # Map section names to their corresponding csv file
+    section_to_file = {}
     for csv_file in csv_files:
-        # Get section name from filename
         section_name = os.path.basename(csv_file).replace('.csv', '')
-        
+        section_to_file[section_name] = csv_file
+
+    # Add sections in the specified order if present
+    for section_name in section_order:
+        csv_file = section_to_file.get(section_name)
+        if not csv_file:
+            continue
         # Read CSV data
         df = pd.read_csv(csv_file)
-        
         # Calculate metrics using existing function
         metrics_text = compute_subsection_bandwise_metrics(
             df,
@@ -159,10 +182,8 @@ def create_combined_document(csv_files, output_path):
             set2_col="T2 Z",
             normalize_col="Normalize"
         )
-
         # Add section heading
         section_heading = doc.add_heading(section_name, level=2)
-        
         # Split and format the metrics text blocks
         for block in metrics_text.strip().split("\n Subsection: "):
             if block.strip():
@@ -171,12 +192,10 @@ def create_combined_document(csv_files, output_path):
                 lines = block.strip().split("\n", 1)
                 subsection_title = lines[0].replace("Subsection: ", "").strip()
                 content = lines[1] if len(lines) > 1 else ""
-
                 para = doc.add_paragraph()
                 run = para.add_run(f"Subsection: {subsection_title}")
                 run.bold = True
                 doc.add_paragraph(content.strip(), style='Normal')
-
         # Add spacing between sections
         doc.add_paragraph()
 
