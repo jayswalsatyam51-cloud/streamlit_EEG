@@ -159,6 +159,19 @@ def create_combined_document(csv_files, output_path):
     ]
     # Map section names to filenames
     section_to_file = {os.path.basename(f).replace('.csv', ''): f for f in csv_files}
+
+    # Metrics to bullet
+    bullet_metrics = [
+        "Absolute Sum:",
+        "Average Absolute Value:",
+        "Delta:",
+        "Percent Change:",
+        "Total Rows:",
+        '"Normalize = Yes":',
+        '"Normalize = No":',
+        '"Normalize = NS":',
+    ]
+
     # Iterate in the desired order
     for section in section_order:
         file_path = section_to_file.get(section)
@@ -185,7 +198,14 @@ def create_combined_document(csv_files, output_path):
                 para = doc.add_paragraph()
                 run = para.add_run(f"Subsection: {subsection_title}")
                 run.bold = True
-                doc.add_paragraph(content.strip(), style='Normal')
+                # Add each line, prepending a bullet if it's a metric
+                for line in content.strip().split("\n"):
+                    line_strip = line.strip()
+                    if any(line_strip.lstrip().startswith(metric) for metric in bullet_metrics):
+                        p = doc.add_paragraph(f"• {line_strip}", style='Normal')
+                        p.paragraph_format.left_indent = Inches(0.4)
+                    elif line_strip:
+                        doc.add_paragraph(line_strip, style='Normal')
         doc.add_paragraph()
     doc.save(output_path)
     print(f"Combined analysis saved to {output_path}")
