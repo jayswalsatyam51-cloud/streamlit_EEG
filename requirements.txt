@@ -6,3 +6,6 @@ pandas
 requests
 python-multipart
 python-docx
+langchain-groq
+boto3
+python-dotenv

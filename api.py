@@ -14,9 +14,15 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import glob
 import numpy as np
 import zipfile
+from dotenv import load_dotenv
+import boto3
+import uuid
+
+load_dotenv()
 
 # Import the extraction functions from pdf_extraction.py
 from pdf_extraction import extract_coherence_phase_lag, extract_other_sections, merge_data, save_to_csv
+from upload_utils import upload_to_s3
 
 app = FastAPI(
     title="PDF Data Extraction API",
@@ -94,11 +100,21 @@ async def extract_data(
                         arcname = os.path.relpath(file_path, start=output_dir)
                         zipf.write(file_path, arcname)
             
-            # Return the zip file as a download
-            return FileResponse(
-                zip_path,
-                filename=os.path.basename(zip_path),
-                media_type='application/zip'
+            # Upload the zip file to S3
+            s3_url, unique_filename = upload_to_s3(zip_path)
+            
+            # Clean up local files
+            shutil.rmtree(output_dir)
+            os.remove(zip_path)
+
+            # Return the S3 URL
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "File processed and uploaded successfully",
+                    "url": s3_url,
+                    "filename": unique_filename
+                }
             )
             
     except Exception as e:
