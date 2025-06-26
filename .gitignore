@@ -1,0 +1,13 @@
+_pycache_
+__pycache__
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.development
+example.env
+.env.test
+.env.production
+eeg
+eeg/

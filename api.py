@@ -103,17 +103,22 @@ async def extract_data(
             # Upload the zip file to S3
             s3_url, unique_filename = upload_to_s3(zip_path)
             
+            # Upload the docx file to S3
+            doc_s3_url, doc_unique_filename = upload_to_s3(str(doc_output_path))
+            
             # Clean up local files
             shutil.rmtree(output_dir)
             os.remove(zip_path)
 
-            # Return the S3 URL
+            # Return the S3 URLs
             return JSONResponse(
                 status_code=200,
                 content={
                     "message": "File processed and uploaded successfully",
                     "url": s3_url,
-                    "filename": unique_filename
+                    "filename": unique_filename,
+                    "doc_url": doc_s3_url,
+                    "doc_filename": doc_unique_filename
                 }
             )
             
