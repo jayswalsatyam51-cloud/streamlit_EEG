@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import shutil
 from typing import List
@@ -28,6 +29,15 @@ app = FastAPI(
     title="PDF Data Extraction API",
     description="API for extracting and processing data from PDF files",
     version="1.0.0"
+)
+
+# Add CORS middleware (aligned with VNG-lite FastAPI configuration)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Create a directory to store uploaded files
