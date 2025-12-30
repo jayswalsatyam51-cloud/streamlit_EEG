@@ -1,6 +1,7 @@
 import boto3, os, sys
 from dotenv import load_dotenv
 import logging
+from typing import Optional, Tuple, Dict, Any
 from botocore.exceptions import ClientError # Import ClientError for better error handling
 
 # Set up logging
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()         # reads .env in project root
 
-def upload_to_s3(local_path: str, max_file_size_mb: int = 500) -> tuple[str, str] | tuple[None, None]:
+def upload_to_s3(local_path: str, max_file_size_mb: int = 500) -> Optional[Tuple[str, str]]:
     """
     Upload a file to DigitalOcean Spaces with automatic unique filename generation.
     
@@ -28,8 +29,8 @@ def upload_to_s3(local_path: str, max_file_size_mb: int = 500) -> tuple[str, str
         
     Returns
     -------
-    tuple[str, str] | tuple[None, None]
-        (cdn_url, unique_filename) on success, (None, None) on failure
+    Optional[Tuple[str, str]]
+        (cdn_url, unique_filename) on success, None on failure
     """
     import uuid
     from datetime import datetime
@@ -83,8 +84,8 @@ def upload_to_s3(local_path: str, max_file_size_mb: int = 500) -> tuple[str, str
 
 def upload_file_to_s3(local_path: str,
                       bucket: str,
-                      key: str | None = None,
-                      extra_args: dict | None = None) -> str | None:
+                      key: Optional[str] = None,
+                      extra_args: Optional[Dict[str, Any]] = None) -> Optional[str]:
     """
     Upload ⁠ local_path ⁠ to DigitalOcean Spaces.
 
@@ -97,7 +98,7 @@ def upload_file_to_s3(local_path: str,
 
     Returns
     -------
-    str | None
+    Optional[str]
         The public CDN URL of the uploaded file, or None on failure.
     """
     if key is None:
