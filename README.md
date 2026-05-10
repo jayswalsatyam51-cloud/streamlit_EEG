@@ -18,6 +18,7 @@ The modular design allows for easy integration of new extraction rules and calcu
 - 🧮 **Automated Calculations:** Applies domain-specific calculations to the extracted data
 - ⚖️ **Comparison Engine:** Compares results between two reports for quick analysis
 - 📦 **Multiple Output Formats:** Supports DOCX and HTML output formats
+- 🧾 **CSWL to DOCX:** Supports direct `.cswl` pair upload via API and generates styled DOCX output
 - ☁️ **Cloud Storage Integration:** Automatically uploads results to DigitalOcean Spaces
 - 🔌 **Extensible:** Easily add new extraction rules or calculation methods
 
@@ -42,6 +43,8 @@ pip install -r requirements.txt
 
 ### 3. Environment Setup
 
+#### Local Development
+
 Create a `.env` file in the project root with the following DigitalOcean Spaces credentials:
 
 ```env
@@ -49,7 +52,29 @@ DO_REGION=nyc3
 DO_ACCESS_KEY=your_access_key_here
 DO_ACCESS_SECRET=your_secret_key_here
 DO_BUCKET_NAME=your_bucket_name_here
+GEMINI_API_KEY=your_gemini_api_key_here
+# Optional: GEMINI_MODEL=gemini-2.5-flash
 ```
+
+#### CapRover Deployment
+
+In CapRover, set the environment variables through the app settings:
+
+1. Go to your CapRover dashboard
+2. Select your app
+3. Navigate to **App Configs** → **Environment Variables**
+4. Add the following environment variables:
+
+| Variable Name | Value |
+|--------------|-------|
+| `DO_REGION` | Your DigitalOcean Spaces region (e.g., `nyc3`) |
+| `DO_ACCESS_KEY` | Your DigitalOcean Spaces access key |
+| `DO_ACCESS_SECRET` | Your DigitalOcean Spaces secret key |
+| `DO_BUCKET_NAME` | Your DigitalOcean Spaces bucket name |
+| `GEMINI_API_KEY` | Google Gemini API key (required for AI interpretation DOCX on `/extraction`) |
+| `GEMINI_MODEL` | Optional; defaults to `gemini-2.5-flash` |
+
+**Important:** After adding environment variables, restart your app in CapRover for the changes to take effect.
 
 ### 4. Run the Application Locally
 
@@ -60,6 +85,20 @@ uvicorn api:app --reload
 ```
 
 The application will be available at [http://127.0.0.1:8000].
+
+### Web UI (optional)
+
+Open **[http://127.0.0.1:8000/ui](http://127.0.0.1:8000/ui)** in a browser to upload two PDFs and receive download links for the ZIP, summary DOCX, and AI interpretation (v1), or HTML output (v2). You can set a different API base URL if the page is served from another origin.
+
+### Streamlit (CSWL → DOCX only)
+
+Runs **standalone** — no `uvicorn` or separate API process. It uses the same CSWL → DOCX logic as **`POST /extraction/cswl`**, but builds the file locally and offers a download (no cloud upload).
+
+```bash
+streamlit run streamlit_cswl.py
+```
+
+Open the URL Streamlit prints (default **http://localhost:8501**).
 
 ---
 
@@ -102,7 +141,7 @@ curl http://127.0.0.1:8000/
 
 **POST** `/extraction`
 
-Uploads two PDF files, extracts data, performs calculations, and returns DOCX format summary.
+Uploads two PDF files, extracts data, performs calculations, and returns DOCX format summary plus an **AI interpretation** DOCX (when `GEMINI_API_KEY` is set). The pipeline first computes **structured diagnostics** (per-section aggregates, top % changes, Set 1 vs Set 2 direction counts) in `eeg_interpretation_diagnostics.json`, then Gemini generates **multiple interpretation candidates** and one deterministic rule-based interpretation in a sectioned narrative (Executive Summary, Descriptive overview, Set 1 vs Set 2 highlights, Cross-section patterns, Limitations)—similar in spirit to tabbed clinical stats UIs, but for two-PDF comparison rather than longitudinal sessions.
 
 **Request Format:**
 - **Method:** `POST`
@@ -139,16 +178,22 @@ print(response.json())
   "url": "https://bucket.region.cdn.digitaloceanspaces.com/timestamp_uuid.zip",
   "filename": "20250101_120000_abc12345.zip",
   "doc_url": "https://bucket.region.cdn.digitaloceanspaces.com/timestamp_uuid.docx",
-  "doc_filename": "20250101_120000_abc12345.docx"
+  "doc_filename": "20250101_120000_abc12345.docx",
+  "interpretation_url": "https://bucket.region.cdn.digitaloceanspaces.com/timestamp_uuid.docx",
+  "interpretation_filename": "20250101_120000_abc12345.docx",
+  "interpretation_note": "Optional: present when AI interpretation was skipped or failed"
 }
 ```
 
 **Response Fields:**
 - `message` (string): Success message
-- `url` (string): CDN URL to the ZIP file containing all CSV files
+- `url` (string): CDN URL to the ZIP file containing all CSV files (includes `eeg_ai_interpretation.docx` and `eeg_interpretation_diagnostics.json` when AI interpretation succeeds)
 - `filename` (string): Unique filename of the ZIP file
-- `doc_url` (string): CDN URL to the DOCX summary document
+- `doc_url` (string): CDN URL to the DOCX summary document (`eeg_analysis_summary.docx`)
 - `doc_filename` (string): Unique filename of the DOCX file
+- `interpretation_url` (string|null): CDN URL to download the **AI interpretation** DOCX; `null` if `GEMINI_API_KEY` is missing or generation failed
+- `interpretation_filename` (string|null): Unique filename for the interpretation file
+- `interpretation_note` (string, optional): Explains why interpretation was skipped (e.g. missing API key) or failed
 
 **Error Responses:**
 - `400 Bad Request`: Invalid file type (not PDF)
@@ -224,7 +269,40 @@ print(response.json())
 
 ---
 
-#### 4. Calculation Endpoint
+#### 4. CSWL Extraction (DOCX Format)
+
+**POST** `/extraction/cswl`
+
+Uploads two `.cswl` files, computes band-wise metrics, and returns a DOCX summary using the same report style as PDF extraction.
+
+**Request Format:**
+- **Method:** `POST`
+- **Content-Type:** `multipart/form-data`
+- **Parameters:**
+  - `cswl1` (file, required): First CSWL file
+  - `cswl2` (file, required): Second CSWL file
+
+**Example using cURL:**
+```bash
+curl -X POST "http://127.0.0.1:8000/extraction/cswl" \
+  -F "cswl1=@EC.D1.cswl" \
+  -F "cswl2=@EO.D1.cswl"
+```
+
+**Response Format:**
+```json
+{
+  "message": "CSWL files processed and uploaded successfully",
+  "url": "https://bucket.region.cdn.digitaloceanspaces.com/timestamp_uuid.zip",
+  "filename": "20250101_120000_abc12345.zip",
+  "doc_url": "https://bucket.region.cdn.digitaloceanspaces.com/timestamp_uuid.docx",
+  "doc_filename": "20250101_120000_abc12345.docx"
+}
+```
+
+---
+
+#### 5. Calculation Endpoint
 
 **POST** `/calculation`
 
@@ -267,7 +345,7 @@ curl -X POST "http://127.0.0.1:8000/calculation" \
 
 ---
 
-#### 5. File Download Endpoint
+#### 6. File Download Endpoint
 
 **GET** `/download/{timestamp}/{filename}`
 
@@ -290,7 +368,7 @@ curl "http://127.0.0.1:8000/download/20250101_120000/eeg_analysis_summary.docx"
 
 ---
 
-#### 6. API Documentation (Swagger UI)
+#### 7. API Documentation (Swagger UI)
 
 **GET** `/docs`
 
@@ -381,6 +459,8 @@ Required environment variables (set in `.env` file):
 | `DO_ACCESS_KEY` | DigitalOcean Spaces access key | `your_access_key` |
 | `DO_ACCESS_SECRET` | DigitalOcean Spaces secret key | `your_secret_key` |
 | `DO_BUCKET_NAME` | DigitalOcean Spaces bucket name | `your_bucket_name` |
+| `GEMINI_API_KEY` | Gemini API key for AI interpretation on `/extraction` | `your_gemini_key` |
+| `GEMINI_MODEL` | Optional Gemini model name | `gemini-2.5-flash` |
 
 ---
 

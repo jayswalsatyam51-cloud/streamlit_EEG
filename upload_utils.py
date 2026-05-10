@@ -54,8 +54,9 @@ def upload_to_s3(local_path: str, max_file_size_mb: int = 500) -> Optional[Tuple
     
     bucket = os.getenv("DO_BUCKET_NAME")
     if not bucket:
-        logger.error("❌ DO_BUCKET_NAME not found in .env")
-        return None, None
+        error_msg = "❌ DO_BUCKET_NAME not found in environment variables. Please set it in CapRover app settings."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
     # Generate unique filename: timestamp_uuid_original_filename
     original_filename = os.path.basename(local_path)
@@ -115,9 +116,18 @@ def upload_file_to_s3(local_path: str,
     secret_key = os.getenv("DO_ACCESS_SECRET")
 
     # All credentials are required for DigitalOcean
-    if not all([region, access_key, secret_key]):
-        logger.error("❌ DO_REGION, DO_ACCESS_KEY, or DO_ACCESS_SECRET not found in .env")
-        return None
+    missing_vars = []
+    if not region:
+        missing_vars.append("DO_REGION")
+    if not access_key:
+        missing_vars.append("DO_ACCESS_KEY")
+    if not secret_key:
+        missing_vars.append("DO_ACCESS_SECRET")
+    
+    if missing_vars:
+        error_msg = f"❌ Missing required environment variables: {', '.join(missing_vars)}. Please set them in CapRover app settings."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
         
     endpoint_url = f"https://{region}.digitaloceanspaces.com"
 

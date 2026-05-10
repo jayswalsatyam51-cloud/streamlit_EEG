@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import shutil
@@ -24,6 +25,13 @@ load_dotenv()
 # Import the extraction functions from pdf_extraction.py
 from pdf_extraction import extract_coherence_phase_lag, extract_other_sections, merge_data, save_to_csv
 from upload_utils import upload_to_s3
+from metrics_core import compute_subsection_bandwise_metrics
+from ai_interpretation import try_generate_ai_interpretation_docx
+from cswl_pipeline import (
+    MAX_CSWL_UPLOAD_BYTES,
+    process_cswl_pair_to_output_dir,
+    secure_cswl_filename,
+)
 
 app = FastAPI(
     title="PDF Data Extraction API",
@@ -43,6 +51,19 @@ app.add_middleware(
 # Create a directory to store uploaded files
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
+async def web_ui():
+    """Browser UI for PDF upload and result downloads (same-origin API by default)."""
+    index = STATIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(str(index))
+    raise HTTPException(status_code=404, detail="UI not found")
 
 @app.post("/extraction")
 async def extract_data(
@@ -100,6 +121,16 @@ async def extract_data(
                 glob.glob(str(output_dir / "*.csv")),
                 str(doc_output_path)
             )
+
+            # AI interpretation DOCX (same metrics pattern as summary; requires GEMINI_API_KEY)
+            csv_list = glob.glob(str(output_dir / "*.csv"))
+            interpretation_path = output_dir / "eeg_ai_interpretation.docx"
+            diagnostics_json_path = output_dir / "eeg_interpretation_diagnostics.json"
+            interpretation_ok, interpretation_err = try_generate_ai_interpretation_docx(
+                str(interpretation_path),
+                csv_list,
+                diagnostics_json_path=str(diagnostics_json_path),
+            )
             
             # Zip the output directory
             zip_path = str(output_dir) + ".zip"
@@ -111,26 +142,55 @@ async def extract_data(
                         zipf.write(file_path, arcname)
             
             # Upload the zip file to DigitalOcean Spaces
-            s3_url, unique_filename = upload_to_s3(zip_path)
+            try:
+                s3_url, unique_filename = upload_to_s3(zip_path)
+            except ValueError as e:
+                # Clean up local files before raising error
+                shutil.rmtree(output_dir)
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                raise HTTPException(status_code=500, detail=str(e))
             
             # Upload the docx file to DigitalOcean Spaces
-            doc_s3_url, doc_unique_filename = upload_to_s3(str(doc_output_path))
+            try:
+                doc_s3_url, doc_unique_filename = upload_to_s3(str(doc_output_path))
+            except ValueError as e:
+                # Clean up local files before raising error
+                shutil.rmtree(output_dir)
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                raise HTTPException(status_code=500, detail=str(e))
+
+            interpretation_url = None
+            interpretation_filename = None
+            if interpretation_ok and interpretation_path.exists():
+                try:
+                    interpretation_url, interpretation_filename = upload_to_s3(
+                        str(interpretation_path)
+                    )
+                except ValueError as e:
+                    shutil.rmtree(output_dir)
+                    if os.path.exists(zip_path):
+                        os.remove(zip_path)
+                    raise HTTPException(status_code=500, detail=str(e))
             
             # Clean up local files
             shutil.rmtree(output_dir)
             os.remove(zip_path)
 
             # Return the DigitalOcean Spaces CDN URLs
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "message": "File processed and uploaded successfully to DigitalOcean Spaces",
-                    "url": s3_url,
-                    "filename": unique_filename,
-                    "doc_url": doc_s3_url,
-                    "doc_filename": doc_unique_filename
-                }
-            )
+            response_body = {
+                "message": "File processed and uploaded successfully to DigitalOcean Spaces",
+                "url": s3_url,
+                "filename": unique_filename,
+                "doc_url": doc_s3_url,
+                "doc_filename": doc_unique_filename,
+                "interpretation_url": interpretation_url,
+                "interpretation_filename": interpretation_filename,
+            }
+            if interpretation_err:
+                response_body["interpretation_note"] = interpretation_err
+            return JSONResponse(status_code=200, content=response_body)
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -203,10 +263,24 @@ async def extract_data_v2(
                         zipf.write(file_path, arcname)
             
             # Upload the zip file to DigitalOcean Spaces
-            s3_url, unique_filename = upload_to_s3(zip_path)
+            try:
+                s3_url, unique_filename = upload_to_s3(zip_path)
+            except ValueError as e:
+                # Clean up local files before raising error
+                shutil.rmtree(output_dir)
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                raise HTTPException(status_code=500, detail=str(e))
             
             # Upload the HTML file to DigitalOcean Spaces
-            html_s3_url, html_unique_filename = upload_to_s3(str(html_output_path))
+            try:
+                html_s3_url, html_unique_filename = upload_to_s3(str(html_output_path))
+            except ValueError as e:
+                # Clean up local files before raising error
+                shutil.rmtree(output_dir)
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                raise HTTPException(status_code=500, detail=str(e))
             
             # Clean up local files
             shutil.rmtree(output_dir)
@@ -227,6 +301,76 @@ async def extract_data_v2(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/extraction/cswl")
+async def extract_data_cswl(
+    cswl1: UploadFile = File(...),
+    cswl2: UploadFile = File(...),
+):
+    """
+    Upload 2 CSWL files and return a DOCX report in the same style as /extraction.
+    """
+    for f in [cswl1, cswl2]:
+        if not f.filename or not f.filename.lower().endswith(".cswl"):
+            raise HTTPException(status_code=400, detail=f"File {f.filename} is not a CSWL file")
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            cswl_paths: list[Path] = []
+
+            for f in [cswl1, cswl2]:
+                safe_name = secure_cswl_filename(f.filename)
+                file_bytes = await f.read()
+                if len(file_bytes) > MAX_CSWL_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail=f"File {safe_name} exceeds max size limit")
+                save_path = temp_dir_path / safe_name
+                save_path.write_bytes(file_bytes)
+                cswl_paths.append(save_path)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = UPLOAD_DIR / f"cswl_{timestamp}"
+            output_dir.mkdir(exist_ok=True)
+
+            doc_output_path = process_cswl_pair_to_output_dir(
+                cswl_paths[0], cswl_paths[1], output_dir
+            )
+
+            zip_path = str(output_dir) + ".zip"
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(output_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, start=output_dir)
+                        zipf.write(file_path, arcname)
+
+            try:
+                s3_url, unique_filename = upload_to_s3(zip_path)
+                doc_s3_url, doc_unique_filename = upload_to_s3(str(doc_output_path))
+            except ValueError as e:
+                shutil.rmtree(output_dir)
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                raise HTTPException(status_code=500, detail=str(e))
+
+            shutil.rmtree(output_dir)
+            os.remove(zip_path)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "CSWL files processed and uploaded successfully",
+                    "url": s3_url,
+                    "filename": unique_filename,
+                    "doc_url": doc_s3_url,
+                    "doc_filename": doc_unique_filename,
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 async def root():
     """
@@ -235,8 +379,10 @@ async def root():
     return {
         "message": "Welcome to PDF Data Extraction API",
         "endpoints": {
+            "/ui": "GET - Web UI (upload PDFs, download result links)",
             "/extraction": "POST - Upload and process PDF files (returns DOCX)",
             "/extraction/v2": "POST - Upload and process PDF files (returns HTML format only)",
+            "/extraction/cswl": "POST - Upload and process CSWL files (returns DOCX)",
             "/docs": "GET - API documentation"
         }
     }
@@ -412,66 +558,6 @@ def apply_all_calculations(csv_path: str, section_type: str) -> None:
     
     # Save the updated DataFrame
     df.to_csv(csv_path, index=False)
-
-def compute_subsection_bandwise_metrics(df: pd.DataFrame, subsection_col: str, band_col: str, set1_col: str, set2_col: str, normalize_col: str) -> str:
-    """Compute metrics for each subsection and band"""
-    subsections = df[subsection_col].dropna().unique()
-    result_blocks = []
-
-    df[set1_col] = pd.to_numeric(df[set1_col], errors='coerce')
-    df[set2_col] = pd.to_numeric(df[set2_col], errors='coerce')
-
-    for subsection in subsections:
-        subsection_df = df[df[subsection_col] == subsection]
-        bands = subsection_df[band_col].dropna().unique()
-
-        result_blocks.append(f"\n Subsection: {subsection} \n")
-
-        for band in bands:
-            band_df = subsection_df[subsection_df[band_col] == band][[set1_col, set2_col, normalize_col]].dropna()
-
-            if band_df.empty:
-                continue
-
-            abs_sum_1 = np.abs(band_df[set1_col]).sum()
-            abs_avg_1 = np.abs(band_df[set1_col]).mean()
-            abs_sum_2 = np.abs(band_df[set2_col]).sum()
-            abs_avg_2 = np.abs(band_df[set2_col]).mean()
-
-            delta = abs(abs_avg_1 - abs_avg_2)
-            percent_change = (delta / abs_avg_1) * 100 if abs_avg_1 != 0 else 0
-            direction = "increase" if abs_avg_2 > abs_avg_1 else "decrease"
-
-            total_rows = len(band_df)
-            normalize_counts = band_df[normalize_col].astype(str).value_counts()
-            normalize_yes = normalize_counts.get("Yes", 0)
-            normalize_no = normalize_counts.get("No", 0)
-            normalize_ns = normalize_counts.get("NS", 0)
-
-            block = f""" Band: {band}
-Set 1 ({set1_col}):
-  Absolute Sum: {abs_sum_1:.2f}
-  Average Absolute Value: {abs_avg_1:.3f}
-
-Set 2 ({set2_col}):
-  Absolute Sum: {abs_sum_2:.2f}
-  Average Absolute Value: {abs_avg_2:.3f}
-
-Differences:
-  Delta: {delta:.3f}
-  Percent Change: {percent_change:.2f}% ({direction} from Set 1 to Set 2)
-
-Normalize Counts:
-  Total Rows: {total_rows}
-  "Normalize = Yes": {normalize_yes} ({(normalize_yes / total_rows) * 100 if total_rows > 0 else 0:.2f}%)
-  "Normalize = No": {normalize_no} ({(normalize_no / total_rows) * 100 if total_rows > 0 else 0:.2f}%)
-  "Normalize = NS": {normalize_ns} ({(normalize_ns / total_rows) * 100 if total_rows > 0 else 0:.2f}%)
-
-__________________________________________________\n"""
-
-            result_blocks.append(block)
-
-    return "\n".join(result_blocks)
 
 def create_combined_html_document(csv_files, output_path):
     """
