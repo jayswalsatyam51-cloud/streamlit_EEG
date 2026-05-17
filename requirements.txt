@@ -1,10 +1,11 @@
 fastapi
 uvicorn
 streamlit
-pdfplumber
+numpy
 pandas
 requests
 python-multipart
 python-docx
 boto3
 python-dotenv
+plotly

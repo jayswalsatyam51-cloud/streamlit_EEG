@@ -1,0 +1,36 @@
+# Secrets & local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Virtualenv & caches
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+
+# Git & IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+.cursor/
+
+# Local outputs & uploads (do not bake into image)
+uploads/
+tmp/
+temp/
+*.log
+*.zip
+*.docx
+*.html
+
+# Medical / sample data (keep out of images)
+*.pdf
+qeeg*.pdf
+
+# OS
+.DS_Store

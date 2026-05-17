@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List
 
+import numpy as np
 import pandas as pd
 
 SECTION_ORDER = [
@@ -40,9 +41,20 @@ def compute_eeg_interpretation_diagnostics(csv_files: List[str]) -> Dict[str, An
         if df.empty:
             continue
 
-        for c in ("Percent_Change", "Delta", "T1 Z", "T2 Z"):
+        for c in ("Percent_Change", "Delta", "T1 Z", "T2 Z", "DZ"):
             if c in df.columns:
                 df[c] = _safe_num(df[c])
+
+        if "Percent_Change" not in df.columns and "T1 Z" in df.columns and "T2 Z" in df.columns:
+            t1 = df["T1 Z"]
+            dz = df["DZ"] if "DZ" in df.columns else df["T2 Z"] - df["T1 Z"]
+            df["Percent_Change"] = np.where(
+                t1.abs() > 1e-9,
+                (dz / t1.abs()) * 100,
+                0.0,
+            )
+        if "Delta" not in df.columns and "DZ" in df.columns:
+            df["Delta"] = df["DZ"]
 
         n = len(df)
         mean_abs_pct = (
@@ -121,7 +133,7 @@ def compute_eeg_interpretation_diagnostics(csv_files: List[str]) -> Dict[str, An
         "sections": sections,
         "global_top_percent_changes": global_top,
         "notes": [
-            "Comparison is between two extracted PDFs (Set 1 vs Set 2), not longitudinal sessions.",
+            "Comparison is EC (Eyes Closed) vs EO (Eyes Open) from CSWL extraction.",
             "Use structured figures only; do not infer clinical diagnosis.",
         ],
     }

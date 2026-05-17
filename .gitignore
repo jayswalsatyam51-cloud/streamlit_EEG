@@ -30,7 +30,7 @@ env.bak/
 venv.bak/
 .venv/
 
-# Environment Variables
+# Environment Variables (never commit real keys)
 .env
 .env.local
 .env.development
@@ -40,6 +40,7 @@ venv.bak/
 .env.production
 .env.production.local
 *.env
+!/.env.example
 example.env
 
 # IDE - VSCode
@@ -96,8 +97,12 @@ uploads/
 *.zip
 *.docx
 *.html
+*.pdf
 eeg/
 eeg
+
+# Cursor / local tooling
+.cursor/
 
 # Logs
 *.log
@@ -121,9 +126,6 @@ htmlcov/
 *.swo
 tmp/
 temp/
-
-# Docker
-.dockerignore
 
 # Database
 *.db
