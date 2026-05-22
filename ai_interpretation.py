@@ -43,11 +43,10 @@ def _build_prompt(pkg: AnalysisPackage) -> str:
     if len(pkg.to_prompt_context()) > MAX_INPUT_CHARS:
         content += "\n\n[Note: Input was truncated for model context limits.]"
 
-    if pkg.mode == "horizontal":
+    if pkg.mode == "vertical":
         intro = (
-            "You are assisting with **QEEG Horizontal (Clinical) Analysis**: direct comparison of "
-            "EC (Eyes Closed) vs EO (Eyes Open) from CSWL extraction — same style as "
-            "KwikEDART clinical report comparison.\n\n"
+            "You are assisting with **QEEG Vertical Analysis**: direct EC (Eyes Closed) vs "
+            "EO (Eyes Open) comparison from CSWL extraction.\n\n"
             "Focus on:\n"
             "- Band-wise and subsection aggregates (LEFT / RIGHT / CENTER)\n"
             "- Percent change, normalize direction counts (Yes/No/NS)\n"
@@ -56,8 +55,8 @@ def _build_prompt(pkg: AnalysisPackage) -> str:
         )
     else:
         intro = (
-            "You are assisting with **QEEG Vertical (NeuroTrack) Analysis**: trajectory and "
-            "statistical spread across EC → EO, aligned with NeuroTrack longitudinal review.\n\n"
+            "You are assisting with **QEEG Horizontal Analysis**: timeline trajectory, "
+            "matrix statistics, and symptom-pattern scores across EC → EO.\n\n"
             "Focus on:\n"
             "- Mean, SD, median, IQR, and % abnormal across EC and EO per segment/band\n"
             "- Trend direction from EC → EO\n"
@@ -174,9 +173,9 @@ def try_generate_analysis_docx(
             csv_files, mode, set1_label=set1_label, set2_label=set2_label
         )
         title = (
-            "QEEG Vertical (NeuroTrack) — AI Report"
+            "QEEG Vertical (EC vs EO) — AI Report"
             if mode == "vertical"
-            else "QEEG Horizontal (Clinical EC vs EO) — AI Report"
+            else "QEEG Horizontal (timeline / matrix) — AI Report"
         )
         write_analysis_docx(output_path, title, report)
         return True, None, report

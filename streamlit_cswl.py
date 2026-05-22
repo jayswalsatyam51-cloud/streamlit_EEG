@@ -63,7 +63,7 @@ def _init_state() -> None:
         "analysis_pkg": None,
         "ai_report": None,
         "ai_docx_bytes": None,
-        "analysis_mode": "horizontal",
+        "analysis_mode": "vertical",
         "neurotrack_view": "analysis",
         "global_matrix_expanded": False,
         "chart_section": "Z Scored FFT Absolute Power",
@@ -112,9 +112,9 @@ def _build_ai_docx_bytes() -> None:
         return
     mode = st.session_state.get("analysis_mode", "vertical")
     title = (
-        "QEEG Vertical (NeuroTrack) — AI Report"
+        "QEEG Vertical (EC vs EO) — AI Report"
         if mode == "vertical"
-        else "QEEG Horizontal (Clinical EC vs EO) — AI Report"
+        else "QEEG Horizontal (timeline / matrix) — AI Report"
     )
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
         write_analysis_docx(tmp.name, title, st.session_state.ai_report)
@@ -211,19 +211,18 @@ def _render_sidebar() -> None:
 
     analysis_choice = sb.radio(
         "Analysis format",
-        options=["horizontal", "vertical"],
-        format_func=lambda x: "Horizontal — clinical EC vs EO"
-        if x == "horizontal"
-        else "Vertical — NeuroTrack timeline",
-        index=0 if st.session_state.get("analysis_mode", "horizontal") == "horizontal" else 1,
+        options=["vertical", "horizontal"],
+        format_func=lambda x: "Vertical — EC vs EO comparison"
+        if x == "vertical"
+        else "Horizontal — timeline / matrix / symptoms",
+        index=0 if st.session_state.get("analysis_mode", "vertical") == "vertical" else 1,
         disabled=not st.session_state.csv_files,
     )
     st.session_state.analysis_mode = analysis_choice
 
-    if analysis_choice == "horizontal":
+    if analysis_choice == "vertical":
         sb.caption(
-            "Clinical comparison like [KwikEDART Horizontal](https://kwikedart.streamlit.app/): "
-            "bands, subsections, % change, abnormal z-scores."
+            "Clinical comparison: bands, subsections, % change, abnormal z-scores."
         )
     else:
         sb.caption(
@@ -231,8 +230,8 @@ def _render_sidebar() -> None:
             "(EC → EO)."
         )
 
-    if analysis_choice == "vertical" and st.session_state.csv_files:
-        sb.markdown("**NeuroTrack scope**")
+    if analysis_choice == "horizontal" and st.session_state.csv_files:
+        sb.markdown("**Horizontal scope**")
         bands = ["DELTA", "THETA", "ALPHA", "BETA", "HIGH BETA", "ALL"]
         h_seg = sb.selectbox("Segment", _segment_options(), key="sb_h_segment")
         h_band = sb.selectbox("Frequency band", bands, key="sb_h_band")
@@ -246,7 +245,7 @@ def _render_sidebar() -> None:
     if (
         st.session_state.analysis_pkg
         and phase == "results"
-        and st.session_state.get("analysis_mode") == "horizontal"
+        and st.session_state.get("analysis_mode") == "vertical"
     ):
         sb.markdown("---")
         sb.markdown("### Chart scope")
@@ -597,13 +596,13 @@ def _render_main_results() -> None:
         st.warning("No analysis yet. Use the sidebar to run analysis.")
         return
 
-    mode = st.session_state.get("analysis_mode", "horizontal")
+    mode = st.session_state.get("analysis_mode", "vertical")
     ec_l, eo_l = _labels()
-    label = "Horizontal (clinical)" if mode == "horizontal" else "Vertical (NeuroTrack)"
+    label = "Vertical (EC vs EO)" if mode == "vertical" else "Horizontal (timeline / matrix)"
     st.header(f"Analysis results — {label}")
     st.markdown(f"Comparing **{ec_l}** vs **{eo_l}**")
 
-    if mode == "horizontal":
+    if mode == "vertical":
         _render_horizontal_clinical(pkg)
         st.markdown("---")
         st.subheader("Subsection statistics")

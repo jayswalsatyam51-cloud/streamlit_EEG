@@ -226,8 +226,12 @@ async def analyze_cswl(
     horizontal_segment: str = Form("GLOBAL_AVG"),
     horizontal_band: str = Form("DELTA"),
     symptom_set_index: int = Form(1),
+    chart_section: str = Form("Z Scored FFT Absolute Power"),
+    chart_subsection: str = Form("LEFT"),
+    chart_band: str = Form("DELTA"),
+    expand_global: bool = Form(True),
 ):
-    """Run vertical or horizontal QEEG statistics; returns JSON for the dashboard charts."""
+    """Run vertical or horizontal QEEG statistics; returns JSON + Plotly charts."""
     try:
         name1, bytes1 = await _read_cswl_upload(cswl1)
         name2, bytes2 = await _read_cswl_upload(cswl2)
@@ -246,8 +250,80 @@ async def analyze_cswl(
                 symptom_set_index=symptom_set_index,
             )
             return JSONResponse(
-                content=package_to_json(pkg, cswl_format=cswl_format),
+                content=package_to_json(
+                    pkg,
+                    cswl_format=cswl_format,
+                    ec_label=set1_label,
+                    eo_label=set2_label,
+                    chart_section=chart_section,
+                    chart_subsection=chart_subsection,
+                    chart_band=chart_band,
+                    horizontal_segment=horizontal_segment,
+                    horizontal_band=horizontal_band,
+                    expand_global=expand_global,
+                ),
             )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/api/run-full-analysis")
+async def run_full_analysis(
+    cswl1: UploadFile = File(...),
+    cswl2: UploadFile = File(...),
+    mode: AnalysisMode = Form("vertical"),
+    set1_label: str = Form("EC (Eyes Closed)"),
+    set2_label: str = Form("EO (Eyes Open)"),
+    horizontal_segment: str = Form("GLOBAL_AVG"),
+    horizontal_band: str = Form("DELTA"),
+    symptom_set_index: int = Form(1),
+    chart_section: str = Form("Z Scored FFT Absolute Power"),
+    chart_subsection: str = Form("LEFT"),
+    chart_band: str = Form("DELTA"),
+    expand_global: bool = Form(True),
+):
+    """Statistics + optional Gemini report in one request (matches Streamlit workflow)."""
+    if not os.getenv("GEMINI_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY is not configured on the server.",
+        )
+    try:
+        name1, bytes1 = await _read_cswl_upload(cswl1)
+        name2, bytes2 = await _read_cswl_upload(cswl2)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            _, cswl_format = _write_cswl_pair(name1, bytes1, name2, bytes2, output_dir)
+            csv_files = sorted(glob.glob(str(output_dir / "*.csv")))
+            pkg = run_statistical_analysis(
+                csv_files,
+                mode,
+                set1_label=set1_label,
+                set2_label=set2_label,
+                horizontal_segment=horizontal_segment,
+                horizontal_band=horizontal_band,
+                symptom_set_index=symptom_set_index,
+            )
+            report = invoke_gemini_analysis(_build_prompt(pkg))
+            body = package_to_json(
+                pkg,
+                cswl_format=cswl_format,
+                ec_label=set1_label,
+                eo_label=set2_label,
+                chart_section=chart_section,
+                chart_subsection=chart_subsection,
+                chart_band=chart_band,
+                horizontal_segment=horizontal_segment,
+                horizontal_band=horizontal_band,
+                expand_global=expand_global,
+            )
+            body["report_markdown"] = report
+            return JSONResponse(content=body)
     except HTTPException:
         raise
     except ValueError as e:

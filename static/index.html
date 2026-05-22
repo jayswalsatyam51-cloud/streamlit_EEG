@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EEG CSWL Analysis</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -17,7 +17,7 @@
         * { box-sizing: border-box; }
         body { font-family: 'IBM Plex Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; margin: 0; }
         .mono { font-family: 'IBM Plex Mono', monospace; }
-        .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
+        .wrap { max-width: 1320px; margin: 0 auto; padding: 24px 20px; }
         .panel { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; }
         .panel-h { padding: 12px 16px; border-bottom: 1px solid var(--border2); font-weight: 600; font-size: 14px; }
         .panel-b { padding: 16px; }
@@ -29,8 +29,6 @@
         .btn-ghost { background: var(--surface2); border-color: var(--border); color: var(--text2); }
         label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; font-weight: 500; }
         select, input[type="file"] { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
-        #upload-area { border: 2px dashed var(--border); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
-        #upload-area:hover { border-color: var(--accent); }
         .hidden { display: none !important; }
         .err { background: rgba(248,81,73,0.12); border: 1px solid rgba(248,81,73,0.35); color: #ffa198; padding: 12px; border-radius: 8px; font-size: 13px; }
         .ok { background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: var(--green); padding: 12px; border-radius: 8px; font-size: 13px; }
@@ -41,13 +39,16 @@
         .md-report h2 { font-size: 16px; margin: 16px 0 8px; color: var(--text); }
         .md-report p { font-size: 13px; color: var(--text2); line-height: 1.55; margin: 0 0 8px; }
         .badge { font-size: 11px; padding: 2px 8px; border-radius: 12px; background: var(--surface2); color: var(--text2); }
+        .chart-box { height: 320px; margin-bottom: 12px; background: #0d1117; border-radius: 8px; }
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+        .compact { font-size: 12px; color: var(--text2); white-space: pre-wrap; font-family: 'IBM Plex Mono', monospace; max-height: 200px; overflow: auto; }
     </style>
 </head>
 <body>
 <div class="wrap">
     <header style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border2);">
         <h1 style="font-size:22px;margin:0 0 6px;">EEG CSWL Analysis</h1>
-        <p style="margin:0;font-size:13px;color:var(--text3);">EC vs EO · Vertical comparison · Horizontal timeline · Gemini AI (server-side)</p>
+        <p style="margin:0;font-size:13px;color:var(--text3);">Same pipeline as Streamlit · Plotly charts · Gemini on server</p>
     </header>
 
     <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
@@ -55,14 +56,8 @@
             <div class="panel">
                 <div class="panel-h">Upload CSWL</div>
                 <div class="panel-b" style="display:flex;flex-direction:column;gap:12px;">
-                    <div>
-                        <label>EC — Eyes Closed</label>
-                        <input type="file" id="cswl-ec" accept=".cswl">
-                    </div>
-                    <div>
-                        <label>EO — Eyes Open</label>
-                        <input type="file" id="cswl-eo" accept=".cswl">
-                    </div>
+                    <div><label>EC — Eyes Closed</label><input type="file" id="cswl-ec" accept=".cswl"></div>
+                    <div><label>EO — Eyes Open</label><input type="file" id="cswl-eo" accept=".cswl"></div>
                     <button type="button" class="btn btn-green" id="btn-process" style="width:100%;">Process → metrics DOCX</button>
                 </div>
             </div>
@@ -77,6 +72,19 @@
                             <option value="horizontal">Horizontal — timeline / matrix</option>
                         </select>
                     </div>
+                    <div id="v-chart-opts" class="hidden">
+                        <label>Chart section</label>
+                        <select id="chart-section"></select>
+                        <label style="margin-top:8px;">Subsection</label>
+                        <select id="chart-subsection">
+                            <option>LEFT</option><option>RIGHT</option><option>CENTER</option><option>ALL</option>
+                        </select>
+                        <label style="margin-top:8px;">Band</label>
+                        <select id="chart-band">
+                            <option>DELTA</option><option>THETA</option><option>ALPHA</option>
+                            <option>BETA</option><option>HIGH BETA</option>
+                        </select>
+                    </div>
                     <div id="h-opts" class="hidden">
                         <label>Segment</label>
                         <select id="h-segment"><option value="GLOBAL_AVG">Global average</option></select>
@@ -89,7 +97,8 @@
                         <select id="h-symptom"><option value="0">EC</option><option value="1" selected>EO</option></select>
                     </div>
                     <button type="button" class="btn btn-primary" id="btn-analyze" style="width:100%;" disabled>Run statistics</button>
-                    <button type="button" class="btn btn-ghost" id="btn-ai" style="width:100%;" disabled>Run AI report (Gemini)</button>
+                    <button type="button" class="btn btn-primary" id="btn-full" style="width:100%;" disabled>Run statistics + AI (Gemini)</button>
+                    <button type="button" class="btn btn-ghost" id="btn-ai" style="width:100%;" disabled>AI report only</button>
                     <p id="health-line" class="mono" style="font-size:11px;color:var(--text3);margin:0;"></p>
                 </div>
             </div>
@@ -97,7 +106,7 @@
 
         <main style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:16px;">
             <div id="placeholder" class="panel panel-b" style="text-align:center;padding:48px 24px;color:var(--text3);">
-                Upload EC and EO files, then process or run analysis.
+                Upload EC and EO CSWL files, then run analysis.
             </div>
             <div id="loading" class="panel panel-b hidden" style="text-align:center;padding:40px;color:var(--text2);">Working…</div>
             <div id="error" class="err hidden"></div>
@@ -108,21 +117,31 @@
             </div>
 
             <div id="stats-result" class="panel hidden">
-                <div class="panel-h">Statistics <span id="fmt-badge" class="badge"></span></div>
+                <div class="panel-h">Vertical — EC vs EO <span id="fmt-badge" class="badge"></span></div>
                 <div class="panel-b">
-                    <div style="height:280px;margin-bottom:16px;"><canvas id="chart-main"></canvas></div>
-                    <div style="overflow:auto;max-height:320px;">
+                    <div id="charts-vertical" class="chart-grid"></div>
+                    <div style="overflow:auto;max-height:360px;margin-top:12px;">
                         <table id="stats-table"><thead><tr>
                             <th>Section</th><th>Subsection</th><th>Band</th>
                             <th>% change</th><th>Abn EC%</th><th>Abn EO%</th>
                         </tr></thead><tbody></tbody></table>
                     </div>
+                    <details style="margin-top:12px;"><summary style="cursor:pointer;color:var(--text2);font-size:13px;">Computed diagnostics digest</summary>
+                        <pre id="compact-v" class="compact"></pre>
+                    </details>
                 </div>
             </div>
 
             <div id="matrix-result" class="panel hidden">
                 <div class="panel-h">Horizontal matrix</div>
-                <div class="panel-b" style="overflow:auto;"><table id="matrix-table"></table></div>
+                <div class="panel-b">
+                    <div id="charts-horizontal" class="chart-grid"></div>
+                    <div style="overflow:auto;margin-top:12px;"><table id="matrix-table"></table></div>
+                    <details style="margin-top:12px;"><summary style="cursor:pointer;color:var(--text2);font-size:13px;">NeuroTrack table rows</summary>
+                        <div style="overflow:auto;max-height:280px;margin-top:8px;"><table id="nt-table"></table></div>
+                    </details>
+                    <pre id="compact-h" class="compact" style="margin-top:12px;"></pre>
+                </div>
             </div>
 
             <div id="symptoms-result" class="panel hidden">
@@ -144,21 +163,33 @@
     const eoInput = document.getElementById('cswl-eo');
     const modeSel = document.getElementById('analysis-mode');
     const hOpts = document.getElementById('h-opts');
+    const vChartOpts = document.getElementById('v-chart-opts');
     const btnProcess = document.getElementById('btn-process');
     const btnAnalyze = document.getElementById('btn-analyze');
+    const btnFull = document.getElementById('btn-full');
     const btnAi = document.getElementById('btn-ai');
     const loading = document.getElementById('loading');
     const placeholder = document.getElementById('placeholder');
     const errorEl = document.getElementById('error');
-    let chartInstance = null;
+    let geminiOk = false;
+
+    const PLOTLY_LAYOUT = {
+        paper_bgcolor: '#0d1117', plot_bgcolor: '#161b22',
+        font: { color: '#e6edf3', family: 'IBM Plex Sans' },
+        margin: { t: 40, r: 20, b: 50, l: 50 },
+        xaxis: { gridcolor: '#30363d', zerolinecolor: '#30363d' },
+        yaxis: { gridcolor: '#30363d', zerolinecolor: '#30363d' },
+    };
 
     function base() { return window.location.origin; }
     function show(el, on) { el.classList.toggle('hidden', !on); }
     function setBusy(on) {
         show(loading, on);
         btnProcess.disabled = on;
-        btnAnalyze.disabled = on || !filesReady();
-        btnAi.disabled = on || !filesReady();
+        const ready = filesReady();
+        btnAnalyze.disabled = on || !ready;
+        btnFull.disabled = on || !ready || !geminiOk;
+        btnAi.disabled = on || !ready || !geminiOk;
     }
     function filesReady() { return ecInput.files[0] && eoInput.files[0]; }
 
@@ -177,51 +208,41 @@
         fd.append('horizontal_segment', document.getElementById('h-segment').value);
         fd.append('horizontal_band', document.getElementById('h-band').value);
         fd.append('symptom_set_index', document.getElementById('h-symptom').value);
+        fd.append('chart_section', document.getElementById('chart-section').value || 'Z Scored FFT Absolute Power');
+        fd.append('chart_subsection', document.getElementById('chart-subsection').value);
+        fd.append('chart_band', document.getElementById('chart-band').value);
+        fd.append('expand_global', 'true');
         return fd;
     }
 
-    async function loadHealth() {
-        try {
-            const r = await fetch(base() + '/health');
-            const d = await r.json();
-            document.getElementById('health-line').textContent =
-                (d.gemini_configured ? 'Gemini: configured' : 'Gemini: not set') +
-                ' · ' + (d.s3_configured ? 'S3: on' : 'S3: off (local downloads)');
-        } catch (_) {}
+    function plotChart(containerId, figJson, title) {
+        const el = document.getElementById(containerId);
+        if (!el || !figJson || !figJson.data || !figJson.data.length) return;
+        const layout = Object.assign({}, PLOTLY_LAYOUT, figJson.layout || {}, { title: title || figJson.layout?.title });
+        Plotly.newPlot(el, figJson.data, layout, { responsive: true, displayModeBar: false });
     }
 
-    modeSel.addEventListener('change', () => {
-        show(hOpts, modeSel.value === 'horizontal');
-    });
-    [ecInput, eoInput].forEach(inp => inp.addEventListener('change', () => {
-        btnAnalyze.disabled = !filesReady();
-        btnAi.disabled = !filesReady();
-    }));
-
-    function renderVerticalChart(rows) {
-        const bySub = {};
-        rows.forEach(r => {
-            const k = r.subsection + ' · ' + r.band;
-            bySub[k] = r.pct_change;
-        });
-        const labels = Object.keys(bySub).slice(0, 16);
-        const data = labels.map(k => bySub[k]);
-        const ctx = document.getElementById('chart-main').getContext('2d');
-        if (chartInstance) chartInstance.destroy();
-        chartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{ label: '% change EC→EO', data, backgroundColor: data.map(v => v >= 0 ? 'rgba(248,81,73,0.7)' : 'rgba(63,185,80,0.7)') }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b949e', maxRotation: 45 } }, y: { ticks: { color: '#8b949e' } } } }
+    function renderPlotlyCharts(container, charts, titles) {
+        container.innerHTML = '';
+        const keys = Object.keys(charts || {});
+        if (!keys.length) {
+            container.innerHTML = '<p style="color:var(--text3);font-size:13px;">No chart data for this selection.</p>';
+            return;
+        }
+        keys.forEach((key, i) => {
+            const box = document.createElement('div');
+            box.className = 'chart-box';
+            box.id = 'plot-' + container.id + '-' + i;
+            container.appendChild(box);
+            plotChart(box.id, charts[key], titles[key] || key);
         });
     }
 
     function fillStatsTable(rows) {
         const tbody = document.querySelector('#stats-table tbody');
         tbody.innerHTML = '';
-        rows.sort((a, b) => Math.abs(b.pct_change) - Math.abs(a.pct_change)).slice(0, 40).forEach(r => {
+        if (!rows || !rows.length) return;
+        rows.sort((a, b) => Math.abs(b.pct_change) - Math.abs(a.pct_change)).slice(0, 50).forEach(r => {
             const tr = document.createElement('tr');
             tr.innerHTML = `<td>${r.section||''}</td><td>${r.subsection||''}</td><td>${r.band||''}</td>
                 <td class="mono">${(r.pct_change??0).toFixed(1)}%</td>
@@ -232,30 +253,123 @@
 
     function fillMatrix(rows) {
         const table = document.getElementById('matrix-table');
-        if (!rows.length) { table.innerHTML = '<p style="color:var(--text3)">No matrix rows.</p>'; return; }
+        if (!rows || !rows.length) { table.innerHTML = '<p style="color:var(--text3)">No matrix rows.</p>'; return; }
         const cols = Object.keys(rows[0]).filter(k => !['label','type'].includes(k));
         table.innerHTML = '<thead><tr><th>Row</th>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
-            rows.map(r => '<tr><td>' + r.label + '</td>' + cols.map(c => `<td class="mono">${r[c] ?? '—'}</td>`).join('') + '</tr>').join('') +
+            rows.map(r => '<tr><td>' + (r.label||'') + '</td>' + cols.map(c => `<td class="mono">${r[c] ?? '—'}</td>`).join('') + '</tr>').join('') +
+            '</tbody>';
+    }
+
+    function fillNtTable(rows) {
+        const table = document.getElementById('nt-table');
+        if (!rows || !rows.length) { table.innerHTML = ''; return; }
+        const cols = Object.keys(rows[0]);
+        table.innerHTML = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
+            rows.slice(0, 40).map(r => '<tr>' + cols.map(c => `<td class="mono">${r[c] ?? ''}</td>`).join('') + '</tr>').join('') +
             '</tbody>';
     }
 
     function fillSymptoms(list) {
         const el = document.getElementById('symptoms-list');
-        if (!list.length) { el.innerHTML = '<p style="color:var(--text3)">No patterns above threshold.</p>'; return; }
+        if (!list || !list.length) { el.innerHTML = '<p style="color:var(--text3)">No patterns above threshold.</p>'; return; }
         el.innerHTML = list.map(s => `
             <div style="border:1px solid var(--border2);border-radius:8px;padding:12px;margin-bottom:8px;">
                 <strong>${s.name}</strong> <span class="mono" style="color:var(--yellow)">${s.score}/10</span>
-                <p style="font-size:12px;color:var(--text3);margin:6px 0 0;">${s.description}</p>
+                <p style="font-size:12px;color:var(--text3);margin:6px 0 0;">${s.description||''}</p>
             </div>`).join('');
     }
 
     function renderMarkdown(md) {
-        return md.split('\n').map(line => {
+        return (md || '').split('\n').map(line => {
             if (line.startsWith('## ')) return `<h2>${line.slice(3)}</h2>`;
             if (line.startsWith('- ')) return `<p>• ${line.slice(2)}</p>`;
             return line.trim() ? `<p>${line}</p>` : '';
         }).join('');
     }
+
+    function populateSectionSelect(sections) {
+        const sel = document.getElementById('chart-section');
+        const list = sections && sections.length ? sections : ['Z Scored FFT Absolute Power'];
+        const cur = sel.value;
+        sel.innerHTML = list.map(s => `<option>${s}</option>`).join('');
+        if (list.includes(cur)) sel.value = cur;
+    }
+
+    function populateSegments(segments) {
+        const sel = document.getElementById('h-segment');
+        const cur = sel.value;
+        const list = segments && segments.length ? segments : ['GLOBAL_AVG'];
+        sel.innerHTML = list.map(s => `<option value="${s}">${s}</option>`).join('');
+        if (list.includes(cur)) sel.value = cur;
+    }
+
+    function hideResults() {
+        ['stats-result','matrix-result','symptoms-result','ai-result'].forEach(id => show(document.getElementById(id), false));
+    }
+
+    function displayAnalysis(data) {
+        hideResults();
+        document.getElementById('fmt-badge').textContent = data.cswl_format || '';
+        if (data.sections) populateSectionSelect(data.sections);
+
+        if (data.mode === 'vertical') {
+            fillStatsTable(data.vertical_subsection_stats);
+            document.getElementById('compact-v').textContent = data.compact_diagnostics || '';
+            const titles = {
+                top_changes: 'Top clinical % changes',
+                heatmap: 'Heatmap — % change',
+                pct_bars: 'Band bars (subsection)',
+                subsection_cmp: 'Subsection comparison',
+                trajectory: 'Z trajectory',
+                channel_scatter: 'Channel detail',
+            };
+            renderPlotlyCharts(document.getElementById('charts-vertical'), data.charts, titles);
+            show(document.getElementById('stats-result'), true);
+        }
+
+        if (data.mode === 'horizontal') {
+            if (data.segments) populateSegments(data.segments);
+            fillMatrix(data.horizontal_matrix);
+            fillNtTable(data.neurotrack_table_rows);
+            document.getElementById('compact-h').textContent = data.compact_diagnostics || '';
+            const titles = { trajectory: 'EC → EO trajectory', symptoms: 'Symptom scores' };
+            renderPlotlyCharts(document.getElementById('charts-horizontal'), data.charts, titles);
+            show(document.getElementById('matrix-result'), true);
+            if (data.symptom_results && data.symptom_results.length) {
+                fillSymptoms(data.symptom_results);
+                show(document.getElementById('symptoms-result'), true);
+            }
+        }
+
+        if (data.report_markdown) {
+            document.getElementById('ai-body').innerHTML = renderMarkdown(data.report_markdown);
+            show(document.getElementById('ai-result'), true);
+        }
+    }
+
+    async function loadHealth() {
+        try {
+            const r = await fetch(base() + '/health');
+            const d = await r.json();
+            geminiOk = !!d.gemini_configured;
+            document.getElementById('health-line').textContent =
+                (geminiOk ? 'Gemini: configured' : 'Gemini: not set (add GEMINI_API_KEY on Render)') +
+                ' · ' + (d.s3_configured ? 'S3: on' : 'S3: off');
+            btnFull.disabled = !filesReady() || !geminiOk;
+            btnAi.disabled = !filesReady() || !geminiOk;
+        } catch (_) {}
+    }
+
+    modeSel.addEventListener('change', () => {
+        const h = modeSel.value === 'horizontal';
+        show(hOpts, h);
+        show(vChartOpts, !h);
+    });
+    [ecInput, eoInput].forEach(inp => inp.addEventListener('change', () => {
+        btnAnalyze.disabled = !filesReady();
+        btnFull.disabled = !filesReady() || !geminiOk;
+        btnAi.disabled = !filesReady() || !geminiOk;
+    }));
 
     btnProcess.addEventListener('click', async () => {
         if (!filesReady()) { alert('Select EC and EO CSWL files.'); return; }
@@ -280,41 +394,30 @@
         } finally { setBusy(false); }
     });
 
-    btnAnalyze.addEventListener('click', async () => {
+    async function runAnalyze(url) {
         if (!filesReady()) return;
         show(placeholder, false); show(errorEl, false);
-        ['stats-result','matrix-result','symptoms-result','ai-result'].forEach(id => show(document.getElementById(id), false));
+        hideResults();
         setBusy(true);
         try {
-            const res = await fetch(base() + '/api/analyze', { method: 'POST', body: analysisForm() });
+            const res = await fetch(base() + url, { method: 'POST', body: analysisForm() });
             const data = await res.json();
             if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
-            document.getElementById('fmt-badge').textContent = data.cswl_format || '';
-            if (data.mode === 'vertical' && data.vertical_subsection_stats) {
-                fillStatsTable(data.vertical_subsection_stats);
-                renderVerticalChart(data.vertical_subsection_stats);
-                show(document.getElementById('stats-result'), true);
-            }
-            if (data.mode === 'horizontal') {
-                if (data.horizontal_matrix && data.horizontal_matrix.length) {
-                    fillMatrix(data.horizontal_matrix);
-                    show(document.getElementById('matrix-result'), true);
-                }
-                if (data.symptom_results) {
-                    fillSymptoms(data.symptom_results);
-                    show(document.getElementById('symptoms-result'), true);
-                }
-            }
+            displayAnalysis(data);
         } catch (e) {
             errorEl.textContent = e.message || String(e);
             show(errorEl, true);
             show(placeholder, true);
         } finally { setBusy(false); }
-    });
+    }
+
+    btnAnalyze.addEventListener('click', () => runAnalyze('/api/analyze'));
+    btnFull.addEventListener('click', () => runAnalyze('/api/run-full-analysis'));
 
     btnAi.addEventListener('click', async () => {
         if (!filesReady()) return;
-        show(errorEl, false); setBusy(true);
+        show(placeholder, false); show(errorEl, false);
+        setBusy(true);
         try {
             const res = await fetch(base() + '/api/ai-report', { method: 'POST', body: analysisForm() });
             const data = await res.json();
@@ -329,6 +432,7 @@
 
     loadHealth();
     modeSel.dispatchEvent(new Event('change'));
+    populateSectionSelect([]);
 })();
 </script>
 </body>

@@ -533,8 +533,8 @@ def run_statistical_analysis(
         metrics_digest="\n".join(digest_parts).strip(),
     )
 
-    # Horizontal = clinical EC vs EO (KwikEDART). Vertical = NeuroTrack timeline.
-    if mode == "horizontal":
+    # Vertical = EC vs EO clinical comparison. Horizontal = NeuroTrack timeline / matrix.
+    if mode == "vertical":
         pkg.vertical_subsection_stats = build_vertical_subsection_stats(csv_files)
         pkg.vertical_channel_tables = build_vertical_summary_tables(csv_files)
         try:
@@ -543,13 +543,13 @@ def run_statistical_analysis(
             pkg.clinical_diagnostics = compute_eeg_interpretation_diagnostics(csv_files)
         except Exception:
             pkg.clinical_diagnostics = {}
-        pkg.compact_diagnostics = _format_clinical_compact(
+        pkg.compact_diagnostics = _format_vertical_compact(
             pkg.vertical_subsection_stats, set1_label, set2_label
         )
     else:
         primary = frames.get("Z Scored FFT Absolute Power")
         if primary is None or primary.empty:
-            raise ValueError("Absolute Power section required for vertical (NeuroTrack) analysis")
+            raise ValueError("Absolute Power section required for horizontal analysis")
         pkg.timeline_sets = csv_to_timeline_sets(primary, set1_label, set2_label)
         pkg.horizontal_matrix = build_horizontal_matrix(
             pkg.timeline_sets,
@@ -564,21 +564,19 @@ def run_statistical_analysis(
         )
         idx = min(max(symptom_set_index, 1), len(pkg.timeline_sets)) - 1
         pkg.symptom_results = run_symptom_engine(pkg.timeline_sets[idx])
-        pkg.compact_diagnostics = _format_neurotrack_compact(
+        pkg.compact_diagnostics = _format_horizontal_compact(
             pkg.horizontal_matrix, pkg.symptom_results, set1_label, set2_label
         )
 
     return pkg
 
 
-def _format_clinical_compact(
-    stats_df: pd.DataFrame, set1_label: str, set2_label: str
+def _format_vertical_compact(
+    stats_df: pd.DataFrame, set1_label: str = "Set 1", set2_label: str = "Set 2"
 ) -> str:
     if stats_df.empty:
-        return "No clinical comparison statistics available."
-    lines = [
-        f"=== HORIZONTAL CLINICAL ANALYSIS ({set1_label} vs {set2_label}) ===",
-    ]
+        return "No vertical subsection statistics available."
+    lines = [f"=== VERTICAL ANALYSIS ({set1_label} vs {set2_label}) ==="]
     top = stats_df.sort_values("pct_change", ascending=False).head(12)
     for _, r in top.iterrows():
         lines.append(
@@ -589,27 +587,13 @@ def _format_clinical_compact(
     return "\n".join(lines)
 
 
-def _format_vertical_compact(stats_df: pd.DataFrame) -> str:
-    if stats_df.empty:
-        return "No vertical subsection statistics available."
-    lines = ["=== VERTICAL ANALYSIS (Set 1 vs Set 2) ==="]
-    top = stats_df.sort_values("pct_change", ascending=False).head(12)
-    for _, r in top.iterrows():
-        lines.append(
-            f"- [{r['section']}] {r['subsection']} / {r['band']}: "
-            f"Set1={r['set1_mean_abs']}, Set2={r['set2_mean_abs']}, "
-            f"%Δ={r['pct_change']}%, abnormal% S1={r['abnormal_set1_pct']}, S2={r['abnormal_set2_pct']}"
-        )
-    return "\n".join(lines)
-
-
-def _format_neurotrack_compact(
+def _format_horizontal_compact(
     matrix: pd.DataFrame,
     symptoms: list[dict[str, Any]],
     set1_label: str = "Set 1",
     set2_label: str = "Set 2",
 ) -> str:
-    lines = [f"=== VERTICAL NEUROTRACK ({set1_label} → {set2_label}) ==="]
+    lines = [f"=== HORIZONTAL ANALYSIS ({set1_label} → {set2_label}) ==="]
     if not matrix.empty:
         for _, r in matrix.head(15).iterrows():
             set_vals = ", ".join(
