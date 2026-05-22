@@ -42,9 +42,92 @@
         .chart-box { height: 320px; margin-bottom: 12px; background: #0d1117; border-radius: 8px; }
         .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
         .compact { font-size: 12px; color: var(--text2); white-space: pre-wrap; font-family: 'IBM Plex Mono', monospace; max-height: 200px; overflow: auto; }
+        /* Boot splash (Render-style terminal) */
+        body.boot-active { overflow: hidden; }
+        #boot-splash {
+            position: fixed; inset: 0; z-index: 10000; background: #000;
+            color: #c9d1d9; font-family: 'IBM Plex Mono', monospace;
+            display: flex; flex-direction: column; transition: opacity 0.55s ease, visibility 0.55s;
+        }
+        #boot-splash.boot-done { opacity: 0; visibility: hidden; pointer-events: none; }
+        .boot-top {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 20px 24px; border-bottom: 1px solid #21262d;
+        }
+        .boot-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: #fff; letter-spacing: 0.02em; }
+        .boot-logo {
+            width: 28px; height: 28px; border-radius: 6px;
+            background: linear-gradient(135deg, #58a6ff 0%, #1f6feb 50%, #238636 100%);
+            box-shadow: 0 0 12px rgba(88,166,255,0.35);
+        }
+        .boot-status { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #8b949e; letter-spacing: 0.12em; }
+        .boot-spinner {
+            width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff;
+            border-radius: 50%; animation: boot-spin 0.85s linear infinite;
+        }
+        @keyframes boot-spin { to { transform: rotate(360deg); } }
+        .boot-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; overflow: auto; }
+        .boot-logs { width: 100%; max-width: 520px; font-size: 13px; line-height: 1.9; min-height: 120px; }
+        .boot-line { opacity: 0; animation: boot-line-in 0.35s ease forwards; color: #8b949e; }
+        .boot-line .boot-ts { color: #6e7681; margin-right: 10px; }
+        .boot-line.boot-ok { color: #3fb950; }
+        @keyframes boot-line-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .boot-banner {
+            margin: 28px 0; font-size: 10px; line-height: 1.15; color: #e6edf3;
+            text-align: center; opacity: 0; animation: boot-banner-in 0.6s ease 0.2s forwards;
+            white-space: pre; letter-spacing: 0; max-width: 100%; overflow-x: auto;
+        }
+        @media (max-width: 480px) {
+            .boot-banner { font-size: 6px; margin: 16px 0; }
+            .boot-top { padding: 14px 16px; }
+            .boot-status span:last-child { font-size: 9px; }
+        }
+        @keyframes boot-banner-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        .boot-footer {
+            padding: 16px 24px; text-align: center; font-size: 11px; color: #6e7681;
+            border-top: 1px solid #21262d;
+        }
+        .boot-footer a { color: #a371f7; text-decoration: none; }
+        .boot-footer a:hover { text-decoration: underline; }
+        #app-root.boot-hidden { visibility: hidden; }
+        #app-root.boot-visible { visibility: visible; animation: app-fade-in 0.5s ease; }
+        @keyframes app-fade-in { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
-<body>
+<body class="boot-active">
+<div id="boot-splash" role="status" aria-live="polite" aria-label="Application loading">
+    <div class="boot-top">
+        <div class="boot-brand">
+            <div class="boot-logo" aria-hidden="true"></div>
+            <span>EEG CSWL</span>
+        </div>
+        <div class="boot-status">
+            <span class="boot-spinner" aria-hidden="true"></span>
+            <span>APPLICATION LOADING</span>
+        </div>
+    </div>
+    <div class="boot-body">
+        <div class="boot-logs" id="boot-logs"></div>
+        <pre class="boot-banner" id="boot-banner">+==============================================================================+
+|                                                                              |
+|   ███████╗███████╗ ██████╗      ██████╗███████╗██╗    ██╗██╗                 |
+|   ██╔════╝██╔════╝██╔════╝     ██╔════╝██╔════╝██║    ██║██║                 |
+|   █████╗  █████╗  ██║  ███╗    ██║     ███████╗██║ █╗ ██║██║                 |
+|   ██╔══╝  ██╔══╝  ██║   ██║    ██║     ╚════██║██║███╗██║██║                 |
+|   ███████╗███████╗╚██████╔╝    ╚██████╗███████║╚███╔███╔╝██║                 |
+|   ╚══════╝╚══════╝ ╚═════╝      ╚═════╝╚══════╝ ╚══╝╚══╝ ╚═╝                 |
+|                                                                              |
+|              W E L C O M E   T O   E E G   C S W L   A N A L Y S I S         |
+|                                                                              |
++==============================================================================+</pre>
+        <div class="boot-logs" id="boot-logs-after"></div>
+    </div>
+    <div class="boot-footer">
+        EC / EO QEEG · Vertical &amp; Horizontal analysis · <a href="#" id="boot-skip">Skip intro</a>
+    </div>
+</div>
+
+<div id="app-root" class="boot-hidden">
 <div class="wrap">
     <header style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border2);">
         <h1 style="font-size:22px;margin:0 0 6px;">EEG CSWL Analysis</h1>
@@ -156,8 +239,78 @@
         </main>
     </div>
 </div>
+</div>
 
 <script>
+(function bootSplash() {
+    const splash = document.getElementById('boot-splash');
+    const app = document.getElementById('app-root');
+    const logsBefore = document.getElementById('boot-logs');
+    const logsAfter = document.getElementById('boot-logs-after');
+    const skip = document.getElementById('boot-skip');
+    let done = false;
+
+    function ts() {
+        const d = new Date();
+        return [d.getHours(), d.getMinutes(), d.getSeconds()]
+            .map(n => String(n).padStart(2, '0')).join(':');
+    }
+
+    function addLog(container, text, ok) {
+        const line = document.createElement('div');
+        line.className = 'boot-line' + (ok ? ' boot-ok' : '');
+        line.innerHTML = '<span class="boot-ts">' + ts() + '</span>' + text;
+        container.appendChild(line);
+        return new Promise(r => setTimeout(r, ok ? 280 : 520));
+    }
+
+    function finish() {
+        if (done) return;
+        done = true;
+        splash.classList.add('boot-done');
+        document.body.classList.remove('boot-active');
+        app.classList.remove('boot-hidden');
+        app.classList.add('boot-visible');
+        setTimeout(() => splash.remove(), 650);
+    }
+
+    skip.addEventListener('click', e => { e.preventDefault(); finish(); });
+
+    const beforeLogs = [
+        'INCOMING HTTP REQUEST DETECTED ...',
+        'SERVICE WAKING UP ...',
+    ];
+    const afterLogs = [
+        'ALLOCATING COMPUTE RESOURCES ...',
+        'LOADING CSWL PIPELINE & QEEG MODULES ...',
+        'PREPARING VERTICAL / HORIZONTAL ANALYSIS ENGINE ...',
+        'CHECKING GEMINI API CONFIGURATION ...',
+        'STARTING APPLICATION INSTANCE ...',
+    ];
+
+    (async function run() {
+        for (const msg of beforeLogs) await addLog(logsBefore, msg, false);
+        await new Promise(r => setTimeout(r, 400));
+        for (const msg of afterLogs) await addLog(logsAfter, msg, false);
+
+        const healthPromise = fetch(window.location.origin + '/health', { cache: 'no-store' })
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null);
+
+        const minTime = new Promise(r => setTimeout(r, 2200));
+        const [health] = await Promise.all([healthPromise, minTime]);
+
+        if (health && health.gemini_configured) {
+            await addLog(logsAfter, 'GEMINI API KEY DETECTED — AI REPORTS ENABLED', true);
+        } else {
+            await addLog(logsAfter, 'GEMINI NOT CONFIGURED — STATISTICS ONLY', false);
+        }
+        await addLog(logsAfter, 'APPLICATION READY — LOADING DASHBOARD ...', true);
+        await new Promise(r => setTimeout(r, 350));
+        finish();
+    })();
+})();
+
 (function () {
     const ecInput = document.getElementById('cswl-ec');
     const eoInput = document.getElementById('cswl-eo');
