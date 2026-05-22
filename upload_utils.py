@@ -10,6 +10,15 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()         # reads .env in project root
 
+
+def s3_configured() -> bool:
+    """True when DigitalOcean Spaces env vars are all set."""
+    return all(
+        os.getenv(k)
+        for k in ("DO_REGION", "DO_ACCESS_KEY", "DO_ACCESS_SECRET", "DO_BUCKET_NAME")
+    )
+
+
 def upload_to_s3(local_path: str, max_file_size_mb: int = 500) -> Optional[Tuple[str, str]]:
     """
     Upload a file to DigitalOcean Spaces with automatic unique filename generation.

@@ -24,4 +24,5 @@ EXPOSE 8000
 # Uvicorn is used as the ASGI server to run the FastAPI app ('app' from 'api.py').
 # --host 0.0.0.0 makes the server listen on all available network interfaces,
 # which is necessary for it to be accessible from outside the container.
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+ENV PORT=8000
+CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"]

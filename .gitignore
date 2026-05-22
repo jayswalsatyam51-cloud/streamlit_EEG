@@ -97,6 +97,7 @@ uploads/
 *.zip
 *.docx
 *.html
+!static/index.html
 *.pdf
 eeg/
 eeg

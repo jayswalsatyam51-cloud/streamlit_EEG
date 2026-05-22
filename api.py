@@ -1,30 +1,58 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+"""
+EEG CSWL API + static web dashboard for Render / Docker deployment.
+"""
+
+from __future__ import annotations
+
+import glob
+import os
 import shutil
 import tempfile
-from datetime import datetime
-from pathlib import Path
+import uuid
 import zipfile
+from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from upload_utils import upload_to_s3
+from ai_interpretation import _build_prompt, invoke_gemini_analysis
+from api_helpers import package_to_json
 from cswl_pipeline import (
     MAX_CSWL_UPLOAD_BYTES,
     process_cswl_pair_to_output_dir,
     secure_cswl_filename,
 )
+from qeeg_statistical_analysis import AnalysisMode, run_statistical_analysis
+from upload_utils import s3_configured, upload_to_s3
 
 load_dotenv()
 
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+UPLOAD_DIR = Path("uploads")
+JOBS_DIR = UPLOAD_DIR / "jobs"
+UPLOAD_DIR.mkdir(exist_ok=True)
+JOBS_DIR.mkdir(parents=True, exist_ok=True)
+
 app = FastAPI(
-    title="EEG CSWL Analysis API",
-    description="Upload two CSWL files to generate a band-wise metrics DOCX report.",
-    version="2.0.0",
+    title="EEG CSWL Analysis",
+    description="EC/EO CSWL processing, QEEG analysis, and web dashboard.",
+    version="2.1.0",
 )
 
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static_assets")
 
 
 async def _read_cswl_upload(upload: UploadFile) -> tuple[str, bytes]:
@@ -45,59 +73,180 @@ async def _read_cswl_upload(upload: UploadFile) -> tuple[str, bytes]:
     return safe_name, file_bytes
 
 
+def _write_cswl_pair(
+    name1: str,
+    bytes1: bytes,
+    name2: str,
+    bytes2: bytes,
+    output_dir: Path,
+) -> tuple[Path, str]:
+    path1 = output_dir / name1
+    path2 = output_dir / name2
+    path1.write_bytes(bytes1)
+    path2.write_bytes(bytes2)
+    doc_path, cswl_format = process_cswl_pair_to_output_dir(path1, path2, output_dir)
+    return doc_path, cswl_format
+
+
+def _job_urls(job_id: str) -> dict[str, str]:
+    base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+    if not base:
+        return {}
+    return {
+        "doc_url": f"{base}/api/jobs/{job_id}/docx",
+        "zip_url": f"{base}/api/jobs/{job_id}/zip",
+    }
+
+
+def _persist_job(output_dir: Path, doc_path: Path) -> str:
+    job_id = uuid.uuid4().hex[:12]
+    job_path = JOBS_DIR / job_id
+    if job_path.exists():
+        shutil.rmtree(job_path, ignore_errors=True)
+    shutil.copytree(output_dir, job_path)
+
+    zip_path = job_path.parent / f"{job_id}.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in job_path.rglob("*"):
+            if f.is_file():
+                zf.write(f, f.relative_to(job_path))
+    return job_id
+
+
+@app.get("/")
+async def index_page():
+    """Web dashboard (Render primary UI)."""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.is_file():
+        return FileResponse(index_path)
+    return JSONResponse(
+        {"message": "Dashboard not found. Place static/index.html in the repo."},
+        status_code=404,
+    )
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "s3_configured": s3_configured(),
+        "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
+    }
+
+
 @app.post("/extraction")
+@app.post("/extraction/cswl")
 async def extract_cswl(
-    cswl1: UploadFile = File(..., description="First condition (Set 1 / T1 Z)"),
-    cswl2: UploadFile = File(..., description="Second condition (Set 2 / T2 Z)"),
+    cswl1: UploadFile = File(..., description="EC / Set 1"),
+    cswl2: UploadFile = File(..., description="EO / Set 2"),
 ):
-    """
-    Upload two CSWL files, compute band-wise metrics, and return DOCX (+ ZIP) URLs.
-    """
+    """Upload two CSWL files → metrics DOCX (+ optional S3 URLs)."""
     try:
         name1, bytes1 = await _read_cswl_upload(cswl1)
         name2, bytes2 = await _read_cswl_upload(cswl2)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            temp_dir_path = Path(temp_dir)
-            path1 = temp_dir_path / name1
-            path2 = temp_dir_path / name2
-            path1.write_bytes(bytes1)
-            path2.write_bytes(bytes2)
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = UPLOAD_DIR / f"cswl_{timestamp}"
-            output_dir.mkdir(exist_ok=True)
-
-            doc_output_path, cswl_format = process_cswl_pair_to_output_dir(
-                path1, path2, output_dir
+            output_dir = Path(temp_dir)
+            doc_path, cswl_format = _write_cswl_pair(
+                name1, bytes1, name2, bytes2, output_dir
             )
 
-            zip_path = str(output_dir) + ".zip"
+            zip_path = output_dir / "bundle.zip"
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                zipf.write(doc_output_path, doc_output_path.name)
+                for csv_f in output_dir.glob("*.csv"):
+                    zipf.write(csv_f, csv_f.name)
+                zipf.write(doc_path, doc_path.name)
 
-            try:
-                s3_url, unique_filename = upload_to_s3(zip_path)
-                doc_s3_url, doc_unique_filename = upload_to_s3(str(doc_output_path))
-            except ValueError as e:
-                shutil.rmtree(output_dir, ignore_errors=True)
-                if Path(zip_path).exists():
-                    Path(zip_path).unlink(missing_ok=True)
-                raise HTTPException(status_code=500, detail=str(e)) from e
+            payload: dict[str, Any] = {
+                "message": "CSWL files processed successfully",
+                "cswl_format": cswl_format,
+            }
 
-            shutil.rmtree(output_dir, ignore_errors=True)
-            Path(zip_path).unlink(missing_ok=True)
+            if s3_configured():
+                s3_url, unique_filename = upload_to_s3(str(zip_path))
+                doc_s3_url, doc_unique_filename = upload_to_s3(str(doc_path))
+                payload.update(
+                    {
+                        "url": s3_url,
+                        "filename": unique_filename,
+                        "doc_url": doc_s3_url,
+                        "doc_filename": doc_unique_filename,
+                        "storage": "s3",
+                    }
+                )
+            else:
+                job_id = _persist_job(output_dir, doc_path)
+                payload.update(
+                    {
+                        "job_id": job_id,
+                        "doc_url": f"/api/jobs/{job_id}/docx",
+                        "url": f"/api/jobs/{job_id}/zip",
+                        "storage": "local",
+                        "note": "DigitalOcean Spaces not configured; use download links on this host.",
+                    }
+                )
+                payload.update(_job_urls(job_id))
 
+            return JSONResponse(status_code=200, content=payload)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/api/jobs/{job_id}/docx")
+async def download_job_docx(job_id: str):
+    path = JOBS_DIR / job_id / "eeg_analysis_summary.docx"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Report not found or expired")
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=f"eeg_analysis_{job_id}.docx",
+    )
+
+
+@app.get("/api/jobs/{job_id}/zip")
+async def download_job_zip(job_id: str):
+    path = JOBS_DIR / f"{job_id}.zip"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="ZIP not found or expired")
+    return FileResponse(path, media_type="application/zip", filename=f"eeg_{job_id}.zip")
+
+
+@app.post("/api/analyze")
+async def analyze_cswl(
+    cswl1: UploadFile = File(...),
+    cswl2: UploadFile = File(...),
+    mode: AnalysisMode = Form("vertical"),
+    set1_label: str = Form("EC (Eyes Closed)"),
+    set2_label: str = Form("EO (Eyes Open)"),
+    horizontal_segment: str = Form("GLOBAL_AVG"),
+    horizontal_band: str = Form("DELTA"),
+    symptom_set_index: int = Form(1),
+):
+    """Run vertical or horizontal QEEG statistics; returns JSON for the dashboard charts."""
+    try:
+        name1, bytes1 = await _read_cswl_upload(cswl1)
+        name2, bytes2 = await _read_cswl_upload(cswl2)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            _, cswl_format = _write_cswl_pair(name1, bytes1, name2, bytes2, output_dir)
+            csv_files = sorted(glob.glob(str(output_dir / "*.csv")))
+            pkg = run_statistical_analysis(
+                csv_files,
+                mode,
+                set1_label=set1_label,
+                set2_label=set2_label,
+                horizontal_segment=horizontal_segment,
+                horizontal_band=horizontal_band,
+                symptom_set_index=symptom_set_index,
+            )
             return JSONResponse(
-                status_code=200,
-                content={
-                    "message": "CSWL files processed successfully",
-                    "cswl_format": cswl_format,
-                    "url": s3_url,
-                    "filename": unique_filename,
-                    "doc_url": doc_s3_url,
-                    "doc_filename": doc_unique_filename,
-                },
+                content=package_to_json(pkg, cswl_format=cswl_format),
             )
     except HTTPException:
         raise
@@ -107,22 +256,66 @@ async def extract_cswl(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.post("/extraction/cswl")
-async def extract_cswl_legacy(
+@app.post("/api/ai-report")
+async def ai_report(
     cswl1: UploadFile = File(...),
     cswl2: UploadFile = File(...),
+    mode: AnalysisMode = Form("vertical"),
+    set1_label: str = Form("EC (Eyes Closed)"),
+    set2_label: str = Form("EO (Eyes Open)"),
+    horizontal_segment: str = Form("GLOBAL_AVG"),
+    horizontal_band: str = Form("DELTA"),
+    symptom_set_index: int = Form(1),
 ):
-    """Backward-compatible alias for POST /extraction."""
-    return await extract_cswl(cswl1=cswl1, cswl2=cswl2)
+    """Gemini clinical narrative (requires GEMINI_API_KEY on server)."""
+    if not os.getenv("GEMINI_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY is not configured on the server.",
+        )
+    try:
+        name1, bytes1 = await _read_cswl_upload(cswl1)
+        name2, bytes2 = await _read_cswl_upload(cswl2)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            _, cswl_format = _write_cswl_pair(name1, bytes1, name2, bytes2, output_dir)
+            csv_files = sorted(glob.glob(str(output_dir / "*.csv")))
+            pkg = run_statistical_analysis(
+                csv_files,
+                mode,
+                set1_label=set1_label,
+                set2_label=set2_label,
+                horizontal_segment=horizontal_segment,
+                horizontal_band=horizontal_band,
+                symptom_set_index=symptom_set_index,
+            )
+            report = invoke_gemini_analysis(_build_prompt(pkg))
+            return JSONResponse(
+                content={
+                    "report_markdown": report,
+                    "cswl_format": cswl_format,
+                    "mode": mode,
+                }
+            )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/")
-async def root():
+@app.get("/api")
+async def api_meta():
     return {
-        "message": "EEG CSWL Analysis API — upload two .cswl files only",
+        "message": "EEG CSWL Analysis API",
+        "ui": "/",
         "endpoints": {
-            "/extraction": "POST — Upload cswl1 + cswl2 (returns DOCX)",
-            "/extraction/cswl": "POST — Same as /extraction (legacy path)",
-            "/docs": "GET — OpenAPI documentation",
+            "/extraction": "POST cswl1 + cswl2",
+            "/api/analyze": "POST — vertical/horizontal stats JSON",
+            "/api/ai-report": "POST — Gemini narrative",
+            "/health": "GET — config status",
+            "/docs": "OpenAPI",
         },
     }
