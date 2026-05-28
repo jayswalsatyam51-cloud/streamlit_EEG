@@ -3,238 +3,206 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EEG CSWL Analysis</title>
+    <title>QEEG CSWL Dashboard</title>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg: #0d1117; --surface: #161b22; --surface2: #1c2330;
-            --border: #30363d; --border2: #21262d;
-            --text: #e6edf3; --text2: #8b949e; --text3: #6e7681;
-            --accent: #58a6ff; --accent2: #1f6feb;
-            --green: #3fb950; --red: #f85149; --yellow: #d29922;
+            --border: #30363d; --border2: #21262d; --text: #e6edf3;
+            --text2: #8b949e; --text3: #6e7681; --accent: #58a6ff;
+            --accent2: #1f6feb; --green: #3fb950; --red: #f85149; --yellow: #d29922;
         }
         * { box-sizing: border-box; }
-        body { font-family: 'IBM Plex Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; margin: 0; }
-        .mono { font-family: 'IBM Plex Mono', monospace; }
-        .wrap { max-width: 1320px; margin: 0 auto; padding: 24px 20px; }
-        .panel { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; }
-        .panel-h { padding: 12px 16px; border-bottom: 1px solid var(--border2); font-weight: 600; font-size: 14px; }
-        .panel-b { padding: 16px; }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; }
-        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-        .btn-primary { background: var(--accent2); color: #fff; border-color: #388bfd; }
-        .btn-primary:hover:not(:disabled) { background: #388bfd; }
-        .btn-green { background: #238636; color: #fff; }
-        .btn-ghost { background: var(--surface2); border-color: var(--border); color: var(--text2); }
-        label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; font-weight: 500; }
-        select, input[type="file"] { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+        body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: "IBM Plex Sans", sans-serif; }
+        .mono { font-family: "IBM Plex Mono", monospace; }
         .hidden { display: none !important; }
-        .err { background: rgba(248,81,73,0.12); border: 1px solid rgba(248,81,73,0.35); color: #ffa198; padding: 12px; border-radius: 8px; font-size: 13px; }
-        .ok { background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: var(--green); padding: 12px; border-radius: 8px; font-size: 13px; }
-        .link a { color: var(--accent); }
+        .wrap { max-width: 1500px; margin: 0 auto; padding: 22px 18px; }
+        .layout { display: flex; gap: 18px; align-items: flex-start; }
+        .panel { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; overflow: hidden; }
+        .panel-h { padding: 12px 14px; border-bottom: 1px solid var(--border2); font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .panel-b { padding: 14px; }
+        aside { width: 310px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 14px; }
+        main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; font-size: 12px; font-weight: 600; }
+        .btn:disabled { opacity: .45; cursor: not-allowed; }
+        .btn-primary { background: var(--accent2); border-color: #388bfd; color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: #388bfd; }
+        .btn-green { background: #238636; border-color: #2ea043; color: #fff; }
+        .btn-ghost { background: var(--surface2); border-color: var(--border); color: var(--text2); }
+        .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--text3); }
+        label { display: block; font-size: 12px; color: var(--text2); margin: 0 0 5px; }
+        select, input[type="file"] {
+            width: 100%; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+            padding: 8px 10px; font-size: 12px;
+        }
+        .subtle { font-size: 11px; color: var(--text3); }
+        .error { background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.35); color: #ffa198; padding: 12px; border-radius: 8px; font-size: 12px; }
+        .ok { background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.35); color: #7ee787; padding: 12px; border-radius: 8px; font-size: 12px; }
+        .status-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+        .card { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 12px; }
+        .card-k { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+        .card-v { font-size: 18px; color: var(--text); font-weight: 700; }
+        .tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--border2); }
+        .tab { border: 1px solid var(--border); background: var(--surface2); color: var(--text2); border-radius: 999px; padding: 5px 10px; font-size: 11px; cursor: pointer; }
+        .tab.active { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,.12); }
+        .tab-pane { padding: 14px; }
+        .plot-wrap { height: 520px; border: 1px solid var(--border2); border-radius: 8px; overflow: hidden; background: #0b1016; }
+        .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th, td { border: 1px solid var(--border2); padding: 6px 8px; text-align: left; }
-        th { background: var(--surface2); color: var(--text2); }
-        .md-report h2 { font-size: 16px; margin: 16px 0 8px; color: var(--text); }
-        .md-report p { font-size: 13px; color: var(--text2); line-height: 1.55; margin: 0 0 8px; }
-        .badge { font-size: 11px; padding: 2px 8px; border-radius: 12px; background: var(--surface2); color: var(--text2); }
-        .chart-box { height: 320px; margin-bottom: 12px; background: #0d1117; border-radius: 8px; }
-        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-        .compact { font-size: 12px; color: var(--text2); white-space: pre-wrap; font-family: 'IBM Plex Mono', monospace; max-height: 200px; overflow: auto; }
-        /* Boot splash (Render-style terminal) */
+        th, td { border: 1px solid var(--border2); padding: 7px 8px; text-align: left; }
+        th { background: var(--surface2); color: var(--text2); position: sticky; top: 0; }
+        tbody tr:nth-child(even) { background: rgba(255,255,255,0.01); }
+        .table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--border2); border-radius: 8px; }
+        .digest { white-space: pre-wrap; max-height: 520px; overflow: auto; border: 1px solid var(--border2); background: #0b1016; border-radius: 8px; padding: 12px; font-size: 12px; color: var(--text2); }
+        .md-report h2 { font-size: 16px; margin: 12px 0 6px; color: var(--text); }
+        .md-report p { margin: 0 0 8px; line-height: 1.6; color: var(--text2); font-size: 13px; }
+        .chip { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text2); }
+        .chip.good { color: var(--green); border-color: rgba(63,185,80,.35); background: rgba(63,185,80,.12); }
+        .chip.warn { color: var(--yellow); border-color: rgba(210,153,34,.35); background: rgba(210,153,34,.12); }
+        @media (max-width: 1100px) { .layout { flex-direction: column; } aside { width: 100%; position: static; } .plot-wrap { height: 420px; } }
+
+        /* Boot splash */
         body.boot-active { overflow: hidden; }
-        #boot-splash {
-            position: fixed; inset: 0; z-index: 10000; background: #000;
-            color: #c9d1d9; font-family: 'IBM Plex Mono', monospace;
-            display: flex; flex-direction: column; transition: opacity 0.55s ease, visibility 0.55s;
-        }
+        #boot-splash { position: fixed; inset: 0; z-index: 10000; background: #000; color: #c9d1d9; font-family: "IBM Plex Mono", monospace; display: flex; flex-direction: column; transition: opacity .45s ease, visibility .45s; }
         #boot-splash.boot-done { opacity: 0; visibility: hidden; pointer-events: none; }
-        .boot-top {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 20px 24px; border-bottom: 1px solid #21262d;
-        }
-        .boot-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: #fff; letter-spacing: 0.02em; }
-        .boot-logo {
-            width: 28px; height: 28px; border-radius: 6px;
-            background: linear-gradient(135deg, #58a6ff 0%, #1f6feb 50%, #238636 100%);
-            box-shadow: 0 0 12px rgba(88,166,255,0.35);
-        }
-        .boot-status { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #8b949e; letter-spacing: 0.12em; }
-        .boot-spinner {
-            width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff;
-            border-radius: 50%; animation: boot-spin 0.85s linear infinite;
-        }
-        @keyframes boot-spin { to { transform: rotate(360deg); } }
-        .boot-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; overflow: auto; }
-        .boot-logs { width: 100%; max-width: 520px; font-size: 13px; line-height: 1.9; min-height: 120px; }
-        .boot-line { opacity: 0; animation: boot-line-in 0.35s ease forwards; color: #8b949e; }
-        .boot-line .boot-ts { color: #6e7681; margin-right: 10px; }
-        .boot-line.boot-ok { color: #3fb950; }
-        @keyframes boot-line-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-        .boot-banner {
-            margin: 28px 0; font-size: 10px; line-height: 1.15; color: #e6edf3;
-            text-align: center; opacity: 0; animation: boot-banner-in 0.6s ease 0.2s forwards;
-            white-space: pre; letter-spacing: 0; max-width: 100%; overflow-x: auto;
-        }
-        @media (max-width: 480px) {
-            .boot-banner { font-size: 6px; margin: 16px 0; }
-            .boot-top { padding: 14px 16px; }
-            .boot-status span:last-child { font-size: 9px; }
-        }
-        @keyframes boot-banner-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-        .boot-footer {
-            padding: 16px 24px; text-align: center; font-size: 11px; color: #6e7681;
-            border-top: 1px solid #21262d;
-        }
-        .boot-footer a { color: #a371f7; text-decoration: none; }
-        .boot-footer a:hover { text-decoration: underline; }
+        .boot-top { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; border-bottom: 1px solid #21262d; }
+        .boot-status { display: flex; gap: 9px; align-items: center; color: #8b949e; font-size: 11px; letter-spacing: .1em; }
+        .boot-spinner { width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .85s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .boot-body { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 18px; padding: 16px; }
+        .boot-logs { width: min(620px, 100%); font-size: 13px; line-height: 1.9; color: #8b949e; }
+        .boot-line { opacity: 0; animation: linein .28s ease forwards; }
+        .boot-line.ok { color: #3fb950; }
+        .boot-ts { color: #6e7681; margin-right: 8px; }
+        @keyframes linein { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+        .boot-banner { white-space: pre; overflow-x: auto; font-size: 9px; color: #e6edf3; border: 1px dashed #30363d; padding: 8px; width: min(700px, 100%); }
         #app-root.boot-hidden { visibility: hidden; }
-        #app-root.boot-visible { visibility: visible; animation: app-fade-in 0.5s ease; }
-        @keyframes app-fade-in { from { opacity: 0; } to { opacity: 1; } }
+        #app-root.boot-visible { visibility: visible; animation: fadein .35s ease; }
+        @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body class="boot-active">
-<div id="boot-splash" role="status" aria-live="polite" aria-label="Application loading">
+<div id="boot-splash" role="status" aria-live="polite">
     <div class="boot-top">
-        <div class="boot-brand">
-            <div class="boot-logo" aria-hidden="true"></div>
-            <span>EEG CSWL</span>
+        <div style="display:flex;align-items:center;gap:10px;color:#fff;font-weight:600;">
+            <span style="width:26px;height:26px;border-radius:6px;background:linear-gradient(135deg,#58a6ff,#1f6feb,#238636);display:inline-block;"></span>
+            EEG CSWL
         </div>
-        <div class="boot-status">
-            <span class="boot-spinner" aria-hidden="true"></span>
-            <span>APPLICATION LOADING</span>
-        </div>
+        <div class="boot-status"><span class="boot-spinner"></span><span>APPLICATION LOADING</span></div>
     </div>
     <div class="boot-body">
         <div class="boot-logs" id="boot-logs"></div>
-        <pre class="boot-banner" id="boot-banner">+==============================================================================+
-|                                                                              |
-|   ███████╗███████╗ ██████╗      ██████╗███████╗██╗    ██╗██╗                 |
-|   ██╔════╝██╔════╝██╔════╝     ██╔════╝██╔════╝██║    ██║██║                 |
-|   █████╗  █████╗  ██║  ███╗    ██║     ███████╗██║ █╗ ██║██║                 |
-|   ██╔══╝  ██╔══╝  ██║   ██║    ██║     ╚════██║██║███╗██║██║                 |
-|   ███████╗███████╗╚██████╔╝    ╚██████╗███████║╚███╔███╔╝██║                 |
-|   ╚══════╝╚══════╝ ╚═════╝      ╚═════╝╚══════╝ ╚══╝╚══╝ ╚═╝                 |
-|                                                                              |
-|              W E L C O M E   T O   E E G   C S W L   A N A L Y S I S         |
-|                                                                              |
-+==============================================================================+</pre>
+        <pre class="boot-banner">+======================================================+
+|                                                      |
+|   WELCOME TO QEEG CSWL ANALYSIS DASHBOARD            |
+|   Vertical + Horizontal + AI Clinical Narrative      |
+|                                                      |
++======================================================+</pre>
         <div class="boot-logs" id="boot-logs-after"></div>
-    </div>
-    <div class="boot-footer">
-        EC / EO QEEG · Vertical &amp; Horizontal analysis · <a href="#" id="boot-skip">Skip intro</a>
+        <div class="subtle">Tip: upload EC and EO CSWL files to begin.</div>
     </div>
 </div>
 
 <div id="app-root" class="boot-hidden">
 <div class="wrap">
-    <header style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border2);">
-        <h1 style="font-size:22px;margin:0 0 6px;">EEG CSWL Analysis</h1>
-        <p style="margin:0;font-size:13px;color:var(--text3);">Same pipeline as Streamlit · Plotly charts · Gemini on server</p>
+    <header style="padding-bottom:16px;border-bottom:1px solid var(--border2);margin-bottom:14px;">
+        <h1 style="margin:0 0 6px;font-size:22px;">QEEG CSWL Dashboard</h1>
+        <p style="margin:0;color:var(--text3);font-size:13px;">Fast HTML UI for Render deployment · Separated charts, stats, tables, diagnostics</p>
     </header>
 
-    <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
-        <aside style="width:300px;flex-shrink:0;display:flex;flex-direction:column;gap:16px;">
+    <div class="layout">
+        <aside>
             <div class="panel">
-                <div class="panel-h">Upload CSWL</div>
-                <div class="panel-b" style="display:flex;flex-direction:column;gap:12px;">
-                    <div><label>EC — Eyes Closed</label><input type="file" id="cswl-ec" accept=".cswl"></div>
-                    <div><label>EO — Eyes Open</label><input type="file" id="cswl-eo" accept=".cswl"></div>
-                    <button type="button" class="btn btn-green" id="btn-process" style="width:100%;">Process → metrics DOCX</button>
+                <div class="panel-h">Upload</div>
+                <div class="panel-b" style="display:flex;flex-direction:column;gap:10px;">
+                    <div><label>EC (Eyes Closed)</label><input type="file" id="cswl-ec" accept=".cswl"></div>
+                    <div><label>EO (Eyes Open)</label><input type="file" id="cswl-eo" accept=".cswl"></div>
+                    <button class="btn btn-green" id="btn-process">Process -> metrics DOCX</button>
+                    <div id="health-line" class="subtle mono"></div>
                 </div>
             </div>
 
             <div class="panel">
-                <div class="panel-h">Analysis</div>
+                <div class="panel-h">Analysis Controls</div>
                 <div class="panel-b" style="display:flex;flex-direction:column;gap:10px;">
                     <div>
                         <label>Mode</label>
                         <select id="analysis-mode">
-                            <option value="vertical">Vertical — EC vs EO comparison</option>
-                            <option value="horizontal">Horizontal — timeline / matrix</option>
+                            <option value="vertical">Vertical (EC vs EO clinical)</option>
+                            <option value="horizontal">Horizontal (timeline / matrix)</option>
                         </select>
                     </div>
-                    <div id="v-chart-opts" class="hidden">
-                        <label>Chart section</label>
-                        <select id="chart-section"></select>
+                    <div id="v-opts">
+                        <label>Section</label><select id="chart-section"></select>
                         <label style="margin-top:8px;">Subsection</label>
-                        <select id="chart-subsection">
-                            <option>LEFT</option><option>RIGHT</option><option>CENTER</option><option>ALL</option>
-                        </select>
+                        <select id="chart-subsection"><option>LEFT</option><option>RIGHT</option><option>CENTER</option><option>ALL</option></select>
                         <label style="margin-top:8px;">Band</label>
-                        <select id="chart-band">
-                            <option>DELTA</option><option>THETA</option><option>ALPHA</option>
-                            <option>BETA</option><option>HIGH BETA</option>
-                        </select>
+                        <select id="chart-band"><option>DELTA</option><option>THETA</option><option>ALPHA</option><option>BETA</option><option>HIGH BETA</option></select>
                     </div>
                     <div id="h-opts" class="hidden">
-                        <label>Segment</label>
-                        <select id="h-segment"><option value="GLOBAL_AVG">Global average</option></select>
-                        <label style="margin-top:8px;">Band</label>
-                        <select id="h-band">
-                            <option>DELTA</option><option>THETA</option><option>ALPHA</option>
-                            <option>BETA</option><option>HIGH BETA</option><option>ALL</option>
-                        </select>
-                        <label style="margin-top:8px;">Symptom engine</label>
-                        <select id="h-symptom"><option value="0">EC</option><option value="1" selected>EO</option></select>
+                        <label>Segment</label><select id="h-segment"><option value="GLOBAL_AVG">GLOBAL_AVG</option></select>
+                        <label style="margin-top:8px;">Band</label><select id="h-band"><option>DELTA</option><option>THETA</option><option>ALPHA</option><option>BETA</option><option>HIGH BETA</option><option>ALL</option></select>
+                        <label style="margin-top:8px;">Symptom target</label><select id="h-symptom"><option value="0">EC</option><option value="1" selected>EO</option></select>
                     </div>
-                    <button type="button" class="btn btn-primary" id="btn-analyze" style="width:100%;" disabled>Run statistics</button>
-                    <button type="button" class="btn btn-primary" id="btn-full" style="width:100%;" disabled>Run statistics + AI (Gemini)</button>
-                    <button type="button" class="btn btn-ghost" id="btn-ai" style="width:100%;" disabled>AI report only</button>
-                    <p id="health-line" class="mono" style="font-size:11px;color:var(--text3);margin:0;"></p>
+                    <button class="btn btn-primary" id="btn-analyze" disabled>Run Statistics</button>
+                    <button class="btn btn-primary" id="btn-full" disabled>Run Statistics + AI</button>
+                    <button class="btn btn-ghost" id="btn-ai" disabled>AI Report Only</button>
                 </div>
+            </div>
+
+            <div class="panel hidden" id="process-result">
+                <div class="panel-h">Processed</div>
+                <div class="panel-b ok" id="process-msg"></div>
             </div>
         </aside>
 
-        <main style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:16px;">
-            <div id="placeholder" class="panel panel-b" style="text-align:center;padding:48px 24px;color:var(--text3);">
-                Upload EC and EO CSWL files, then run analysis.
+        <main>
+            <div id="placeholder" class="panel panel-b" style="text-align:center;padding:55px 20px;color:var(--text3);">
+                Upload EC + EO files and run analysis.
             </div>
-            <div id="loading" class="panel panel-b hidden" style="text-align:center;padding:40px;color:var(--text2);">Working…</div>
-            <div id="error" class="err hidden"></div>
+            <div id="loading" class="panel panel-b hidden" style="text-align:center;padding:45px 20px;color:var(--text2);">Working...</div>
+            <div id="error" class="error hidden"></div>
 
-            <div id="process-result" class="panel hidden">
-                <div class="panel-h">Processed</div>
-                <div class="panel-b ok link" id="process-msg"></div>
-            </div>
+            <div id="result-shell" class="panel hidden">
+                <div class="panel-h">
+                    <span>Analysis Output</span>
+                    <span class="chip mono" id="fmt-chip"></span>
+                </div>
+                <div id="result-meta" class="panel-b"></div>
 
-            <div id="stats-result" class="panel hidden">
-                <div class="panel-h">Vertical — EC vs EO <span id="fmt-badge" class="badge"></span></div>
-                <div class="panel-b">
-                    <div id="charts-vertical" class="chart-grid"></div>
-                    <div style="overflow:auto;max-height:360px;margin-top:12px;">
-                        <table id="stats-table"><thead><tr>
-                            <th>Section</th><th>Subsection</th><th>Band</th>
-                            <th>% change</th><th>Abn EC%</th><th>Abn EO%</th>
-                        </tr></thead><tbody></tbody></table>
+                <div class="tabs">
+                    <button class="tab active" data-tab="overview">Overview</button>
+                    <button class="tab" data-tab="charts">Charts</button>
+                    <button class="tab" data-tab="stats">Statistical Analyses</button>
+                    <button class="tab" data-tab="tables">Tables</button>
+                    <button class="tab" data-tab="diagnostics">Diagnostics</button>
+                    <button class="tab" data-tab="ai">AI Report</button>
+                </div>
+
+                <div id="tab-overview" class="tab-pane"></div>
+                <div id="tab-charts" class="tab-pane hidden">
+                    <div class="toolbar">
+                        <select id="chart-picker" style="max-width:340px;"></select>
+                        <button class="btn btn-ghost" id="btn-chart-png">Export PNG</button>
+                        <button class="btn btn-ghost" id="btn-chart-json">Export JSON</button>
+                        <button class="btn btn-ghost" id="btn-chart-fullscreen">Toggle Full Height</button>
                     </div>
-                    <details style="margin-top:12px;"><summary style="cursor:pointer;color:var(--text2);font-size:13px;">Computed diagnostics digest</summary>
-                        <pre id="compact-v" class="compact"></pre>
-                    </details>
+                    <div id="plot-main" class="plot-wrap"></div>
+                    <p class="subtle" style="margin:8px 0 0;">Zoom/pan/reset/download are enabled in Plotly mode bar.</p>
                 </div>
-            </div>
-
-            <div id="matrix-result" class="panel hidden">
-                <div class="panel-h">Horizontal matrix</div>
-                <div class="panel-b">
-                    <div id="charts-horizontal" class="chart-grid"></div>
-                    <div style="overflow:auto;margin-top:12px;"><table id="matrix-table"></table></div>
-                    <details style="margin-top:12px;"><summary style="cursor:pointer;color:var(--text2);font-size:13px;">NeuroTrack table rows</summary>
-                        <div style="overflow:auto;max-height:280px;margin-top:8px;"><table id="nt-table"></table></div>
-                    </details>
-                    <pre id="compact-h" class="compact" style="margin-top:12px;"></pre>
+                <div id="tab-stats" class="tab-pane hidden"></div>
+                <div id="tab-tables" class="tab-pane hidden"></div>
+                <div id="tab-diagnostics" class="tab-pane hidden">
+                    <div class="toolbar">
+                        <button class="btn btn-ghost" id="btn-digest-copy">Copy diagnostics</button>
+                        <button class="btn btn-ghost" id="btn-digest-txt">Download TXT</button>
+                    </div>
+                    <pre id="digest-text" class="digest mono"></pre>
                 </div>
-            </div>
-
-            <div id="symptoms-result" class="panel hidden">
-                <div class="panel-h">Symptom patterns</div>
-                <div class="panel-b" id="symptoms-list"></div>
-            </div>
-
-            <div id="ai-result" class="panel hidden">
-                <div class="panel-h">AI clinical narrative</div>
-                <div class="panel-b md-report" id="ai-body"></div>
+                <div id="tab-ai" class="tab-pane hidden">
+                    <div class="md-report" id="ai-body"></div>
+                </div>
             </div>
         </main>
     </div>
@@ -242,350 +210,446 @@
 </div>
 
 <script>
-(function bootSplash() {
-    const splash = document.getElementById('boot-splash');
-    const app = document.getElementById('app-root');
-    const logsBefore = document.getElementById('boot-logs');
-    const logsAfter = document.getElementById('boot-logs-after');
-    const skip = document.getElementById('boot-skip');
-    let done = false;
-
-    function ts() {
-        const d = new Date();
-        return [d.getHours(), d.getMinutes(), d.getSeconds()]
-            .map(n => String(n).padStart(2, '0')).join(':');
-    }
-
-    function addLog(container, text, ok) {
-        const line = document.createElement('div');
-        line.className = 'boot-line' + (ok ? ' boot-ok' : '');
-        line.innerHTML = '<span class="boot-ts">' + ts() + '</span>' + text;
-        container.appendChild(line);
-        return new Promise(r => setTimeout(r, ok ? 280 : 520));
-    }
-
-    function finish() {
-        if (done) return;
-        done = true;
-        splash.classList.add('boot-done');
-        document.body.classList.remove('boot-active');
-        app.classList.remove('boot-hidden');
-        app.classList.add('boot-visible');
-        setTimeout(() => splash.remove(), 650);
-    }
-
-    skip.addEventListener('click', e => { e.preventDefault(); finish(); });
-
-    const beforeLogs = [
-        'INCOMING HTTP REQUEST DETECTED ...',
-        'SERVICE WAKING UP ...',
-    ];
-    const afterLogs = [
-        'ALLOCATING COMPUTE RESOURCES ...',
-        'LOADING CSWL PIPELINE & QEEG MODULES ...',
-        'PREPARING VERTICAL / HORIZONTAL ANALYSIS ENGINE ...',
-        'CHECKING GEMINI API CONFIGURATION ...',
-        'STARTING APPLICATION INSTANCE ...',
-    ];
-
-    (async function run() {
-        for (const msg of beforeLogs) await addLog(logsBefore, msg, false);
-        await new Promise(r => setTimeout(r, 400));
-        for (const msg of afterLogs) await addLog(logsAfter, msg, false);
-
-        const healthPromise = fetch(window.location.origin + '/health', { cache: 'no-store' })
-            .then(r => r.ok ? r.json() : null)
-            .catch(() => null);
-
-        const minTime = new Promise(r => setTimeout(r, 2200));
-        const [health] = await Promise.all([healthPromise, minTime]);
-
-        if (health && health.gemini_configured) {
-            await addLog(logsAfter, 'GEMINI API KEY DETECTED — AI REPORTS ENABLED', true);
-        } else {
-            await addLog(logsAfter, 'GEMINI NOT CONFIGURED — STATISTICS ONLY', false);
-        }
-        await addLog(logsAfter, 'APPLICATION READY — LOADING DASHBOARD ...', true);
-        await new Promise(r => setTimeout(r, 350));
-        finish();
+(function boot() {
+    const splash = document.getElementById("boot-splash");
+    const app = document.getElementById("app-root");
+    const logsA = document.getElementById("boot-logs");
+    const logsB = document.getElementById("boot-logs-after");
+    function ts(){const d=new Date();return[d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,"0")).join(":");}
+    function line(el,msg,ok){const div=document.createElement("div");div.className="boot-line"+(ok?" ok":"");div.innerHTML='<span class="boot-ts">'+ts()+'</span>'+msg;el.appendChild(div);return new Promise(r=>setTimeout(r,ok?260:420));}
+    (async () => {
+        for (const m of ["INCOMING HTTP REQUEST DETECTED ...","SERVICE WAKING UP ..."]) await line(logsA,m,false);
+        for (const m of ["ALLOCATING COMPUTE RESOURCES ...","LOADING QEEG MODULES ...","STARTING APPLICATION INSTANCE ..."]) await line(logsB,m,false);
+        try {
+            const h = await fetch(window.location.origin + "/health", {cache:"no-store"}).then(r => r.ok ? r.json() : null);
+            if (h && h.gemini_configured) await line(logsB, "GEMINI API ENABLED", true);
+        } catch (_) {}
+        await line(logsB, "APPLICATION READY", true);
+        await new Promise(r=>setTimeout(r,280));
+        splash.classList.add("boot-done");
+        document.body.classList.remove("boot-active");
+        app.classList.remove("boot-hidden");
+        app.classList.add("boot-visible");
+        setTimeout(()=>splash.remove(),500);
     })();
 })();
 
-(function () {
-    const ecInput = document.getElementById('cswl-ec');
-    const eoInput = document.getElementById('cswl-eo');
-    const modeSel = document.getElementById('analysis-mode');
-    const hOpts = document.getElementById('h-opts');
-    const vChartOpts = document.getElementById('v-chart-opts');
-    const btnProcess = document.getElementById('btn-process');
-    const btnAnalyze = document.getElementById('btn-analyze');
-    const btnFull = document.getElementById('btn-full');
-    const btnAi = document.getElementById('btn-ai');
-    const loading = document.getElementById('loading');
-    const placeholder = document.getElementById('placeholder');
-    const errorEl = document.getElementById('error');
+(function appMain() {
+    const ecInput = document.getElementById("cswl-ec");
+    const eoInput = document.getElementById("cswl-eo");
+    const modeSel = document.getElementById("analysis-mode");
+    const vOpts = document.getElementById("v-opts");
+    const hOpts = document.getElementById("h-opts");
+    const btnProcess = document.getElementById("btn-process");
+    const btnAnalyze = document.getElementById("btn-analyze");
+    const btnFull = document.getElementById("btn-full");
+    const btnAi = document.getElementById("btn-ai");
+    const loading = document.getElementById("loading");
+    const placeholder = document.getElementById("placeholder");
+    const errorEl = document.getElementById("error");
+    const processResult = document.getElementById("process-result");
+    const resultShell = document.getElementById("result-shell");
+    const chartPicker = document.getElementById("chart-picker");
+    const plotMain = document.getElementById("plot-main");
+    const fmtChip = document.getElementById("fmt-chip");
+    const healthLine = document.getElementById("health-line");
+    const digestText = document.getElementById("digest-text");
     let geminiOk = false;
+    let currentData = null;
+    let currentChartKey = null;
+    let chartMap = {};
 
     const PLOTLY_LAYOUT = {
-        paper_bgcolor: '#0d1117', plot_bgcolor: '#161b22',
-        font: { color: '#e6edf3', family: 'IBM Plex Sans' },
-        margin: { t: 40, r: 20, b: 50, l: 50 },
-        xaxis: { gridcolor: '#30363d', zerolinecolor: '#30363d' },
-        yaxis: { gridcolor: '#30363d', zerolinecolor: '#30363d' },
+        paper_bgcolor: "#0b1016",
+        plot_bgcolor: "#0b1016",
+        font: { color: "#e6edf3", family: "IBM Plex Sans" },
+        margin: { t: 50, r: 25, b: 55, l: 55 },
+        xaxis: { gridcolor: "#30363d", zerolinecolor: "#30363d" },
+        yaxis: { gridcolor: "#30363d", zerolinecolor: "#30363d" }
     };
 
-    function base() { return window.location.origin; }
-    function show(el, on) { el.classList.toggle('hidden', !on); }
-    function setBusy(on) {
-        show(loading, on);
+    function base(){ return window.location.origin; }
+    function show(el,on){ el.classList.toggle("hidden", !on); }
+    function filesReady(){ return ecInput.files[0] && eoInput.files[0]; }
+    function setBusy(on){
+        show(loading,on);
         btnProcess.disabled = on;
-        const ready = filesReady();
-        btnAnalyze.disabled = on || !ready;
-        btnFull.disabled = on || !ready || !geminiOk;
-        btnAi.disabled = on || !ready || !geminiOk;
+        btnAnalyze.disabled = on || !filesReady();
+        btnFull.disabled = on || !filesReady() || !geminiOk;
+        btnAi.disabled = on || !filesReady() || !geminiOk;
     }
-    function filesReady() { return ecInput.files[0] && eoInput.files[0]; }
-
-    function formFiles() {
-        const fd = new FormData();
-        fd.append('cswl1', ecInput.files[0]);
-        fd.append('cswl2', eoInput.files[0]);
-        return fd;
-    }
-
-    function analysisForm() {
+    function clearError(){ show(errorEl,false); errorEl.textContent=""; }
+    function setError(msg){ errorEl.textContent = msg || "Unexpected error."; show(errorEl,true); }
+    function formFiles(){ const fd = new FormData(); fd.append("cswl1", ecInput.files[0]); fd.append("cswl2", eoInput.files[0]); return fd; }
+    function analysisForm(){
         const fd = formFiles();
-        fd.append('mode', modeSel.value);
-        fd.append('set1_label', 'EC (Eyes Closed)');
-        fd.append('set2_label', 'EO (Eyes Open)');
-        fd.append('horizontal_segment', document.getElementById('h-segment').value);
-        fd.append('horizontal_band', document.getElementById('h-band').value);
-        fd.append('symptom_set_index', document.getElementById('h-symptom').value);
-        fd.append('chart_section', document.getElementById('chart-section').value || 'Z Scored FFT Absolute Power');
-        fd.append('chart_subsection', document.getElementById('chart-subsection').value);
-        fd.append('chart_band', document.getElementById('chart-band').value);
-        fd.append('expand_global', 'true');
+        fd.append("mode", modeSel.value);
+        fd.append("set1_label", "EC (Eyes Closed)");
+        fd.append("set2_label", "EO (Eyes Open)");
+        fd.append("horizontal_segment", document.getElementById("h-segment").value);
+        fd.append("horizontal_band", document.getElementById("h-band").value);
+        fd.append("symptom_set_index", document.getElementById("h-symptom").value);
+        fd.append("chart_section", document.getElementById("chart-section").value || "Z Scored FFT Absolute Power");
+        fd.append("chart_subsection", document.getElementById("chart-subsection").value);
+        fd.append("chart_band", document.getElementById("chart-band").value);
+        fd.append("expand_global", "true");
         return fd;
     }
-
-    function plotChart(containerId, figJson, title) {
-        const el = document.getElementById(containerId);
-        if (!el || !figJson || !figJson.data || !figJson.data.length) return;
-        const layout = Object.assign({}, PLOTLY_LAYOUT, figJson.layout || {}, { title: title || figJson.layout?.title });
-        Plotly.newPlot(el, figJson.data, layout, { responsive: true, displayModeBar: false });
+    function mdToHtml(md){
+        return String(md || "").split("\n").map(line => {
+            if (line.startsWith("## ")) return "<h2>"+line.slice(3)+"</h2>";
+            if (line.startsWith("- ")) return "<p>• "+line.slice(2)+"</p>";
+            return line.trim() ? "<p>"+line+"</p>" : "";
+        }).join("");
+    }
+    function toNum(v){ const n = Number(v); return Number.isFinite(n) ? n : null; }
+    function avg(arr){ if(!arr.length) return null; return arr.reduce((a,b)=>a+b,0)/arr.length; }
+    function median(arr){ if(!arr.length) return null; const a=[...arr].sort((x,y)=>x-y); const m=Math.floor(a.length/2); return a.length%2 ? a[m] : (a[m-1]+a[m])/2; }
+    function stdev(arr){ if(arr.length<2) return 0; const m=avg(arr); const v=avg(arr.map(x=>(x-m)*(x-m))); return Math.sqrt(v); }
+    function fmt(v, d){ return v===null || v===undefined || Number.isNaN(v) ? "-" : Number(v).toFixed(d ?? 2); }
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+    function downloadText(filename, content){
+        const blob = new Blob([content], {type:"text/plain;charset=utf-8"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+    function csvFromRows(rows){
+        if(!rows || !rows.length) return "";
+        const keys = Object.keys(rows[0]);
+        const esc = (v) => {
+            const s = v == null ? "" : String(v);
+            return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+        };
+        return [keys.join(",")].concat(rows.map(r => keys.map(k => esc(r[k])).join(","))).join("\n");
     }
 
-    function renderPlotlyCharts(container, charts, titles) {
-        container.innerHTML = '';
-        const keys = Object.keys(charts || {});
+    function renderTab(tabId){
+        document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tabId));
+        document.querySelectorAll(".tab-pane").forEach(p => show(p, p.id === "tab-"+tabId));
+    }
+
+    function populateSections(sections){
+        const sel = document.getElementById("chart-section");
+        const list = sections && sections.length ? sections : ["Z Scored FFT Absolute Power"];
+        const cur = sel.value;
+        sel.innerHTML = list.map(s => "<option>"+escapeHtml(s)+"</option>").join("");
+        if (list.includes(cur)) sel.value = cur;
+    }
+    function populateSegments(segments){
+        const sel = document.getElementById("h-segment");
+        const list = segments && segments.length ? segments : ["GLOBAL_AVG"];
+        const cur = sel.value;
+        sel.innerHTML = list.map(s => '<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join("");
+        if (list.includes(cur)) sel.value = cur;
+    }
+
+    function titleMap(mode){
+        if(mode === "vertical"){
+            return {
+                top_changes: "Top Clinical % Changes",
+                heatmap: "Heatmap - Percent Change",
+                pct_bars: "Band Bars (Selected Subsection)",
+                subsection_cmp: "Subsection Comparison",
+                trajectory: "Z Trajectory",
+                channel_scatter: "Channel Detail"
+            };
+        }
+        return { trajectory: "EC -> EO Trajectory", symptoms: "Symptom Scores" };
+    }
+
+    function buildChartPicker(charts, mode){
+        chartMap = charts || {};
+        const keys = Object.keys(chartMap);
+        const names = titleMap(mode);
         if (!keys.length) {
-            container.innerHTML = '<p style="color:var(--text3);font-size:13px;">No chart data for this selection.</p>';
+            chartPicker.innerHTML = "<option>No charts available</option>";
+            currentChartKey = null;
+            plotMain.innerHTML = '<div style="padding:16px;color:var(--text3)">No chart data available for this selection.</div>';
             return;
         }
-        keys.forEach((key, i) => {
-            const box = document.createElement('div');
-            box.className = 'chart-box';
-            box.id = 'plot-' + container.id + '-' + i;
-            container.appendChild(box);
-            plotChart(box.id, charts[key], titles[key] || key);
+        chartPicker.innerHTML = keys.map(k => '<option value="'+k+'">'+escapeHtml(names[k] || k)+'</option>').join("");
+        currentChartKey = keys[0];
+        chartPicker.value = currentChartKey;
+        renderCurrentChart();
+    }
+
+    function renderCurrentChart(){
+        if(!currentChartKey || !chartMap[currentChartKey]) return;
+        const fig = chartMap[currentChartKey];
+        const titles = titleMap(currentData.mode);
+        const layout = Object.assign({}, PLOTLY_LAYOUT, fig.layout || {}, { title: titles[currentChartKey] || currentChartKey });
+        Plotly.newPlot("plot-main", fig.data || [], layout, {
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            scrollZoom: true,
+            modeBarButtonsToAdd: ["toImage"]
         });
     }
 
-    function fillStatsTable(rows) {
-        const tbody = document.querySelector('#stats-table tbody');
-        tbody.innerHTML = '';
-        if (!rows || !rows.length) return;
-        rows.sort((a, b) => Math.abs(b.pct_change) - Math.abs(a.pct_change)).slice(0, 50).forEach(r => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${r.section||''}</td><td>${r.subsection||''}</td><td>${r.band||''}</td>
-                <td class="mono">${(r.pct_change??0).toFixed(1)}%</td>
-                <td class="mono">${r.abnormal_set1_pct??''}</td><td class="mono">${r.abnormal_set2_pct??''}</td>`;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function fillMatrix(rows) {
-        const table = document.getElementById('matrix-table');
-        if (!rows || !rows.length) { table.innerHTML = '<p style="color:var(--text3)">No matrix rows.</p>'; return; }
-        const cols = Object.keys(rows[0]).filter(k => !['label','type'].includes(k));
-        table.innerHTML = '<thead><tr><th>Row</th>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
-            rows.map(r => '<tr><td>' + (r.label||'') + '</td>' + cols.map(c => `<td class="mono">${r[c] ?? '—'}</td>`).join('') + '</tr>').join('') +
-            '</tbody>';
-    }
-
-    function fillNtTable(rows) {
-        const table = document.getElementById('nt-table');
-        if (!rows || !rows.length) { table.innerHTML = ''; return; }
-        const cols = Object.keys(rows[0]);
-        table.innerHTML = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
-            rows.slice(0, 40).map(r => '<tr>' + cols.map(c => `<td class="mono">${r[c] ?? ''}</td>`).join('') + '</tr>').join('') +
-            '</tbody>';
-    }
-
-    function fillSymptoms(list) {
-        const el = document.getElementById('symptoms-list');
-        if (!list || !list.length) { el.innerHTML = '<p style="color:var(--text3)">No patterns above threshold.</p>'; return; }
-        el.innerHTML = list.map(s => `
-            <div style="border:1px solid var(--border2);border-radius:8px;padding:12px;margin-bottom:8px;">
-                <strong>${s.name}</strong> <span class="mono" style="color:var(--yellow)">${s.score}/10</span>
-                <p style="font-size:12px;color:var(--text3);margin:6px 0 0;">${s.description||''}</p>
-            </div>`).join('');
-    }
-
-    function renderMarkdown(md) {
-        return (md || '').split('\n').map(line => {
-            if (line.startsWith('## ')) return `<h2>${line.slice(3)}</h2>`;
-            if (line.startsWith('- ')) return `<p>• ${line.slice(2)}</p>`;
-            return line.trim() ? `<p>${line}</p>` : '';
-        }).join('');
-    }
-
-    function populateSectionSelect(sections) {
-        const sel = document.getElementById('chart-section');
-        const list = sections && sections.length ? sections : ['Z Scored FFT Absolute Power'];
-        const cur = sel.value;
-        sel.innerHTML = list.map(s => `<option>${s}</option>`).join('');
-        if (list.includes(cur)) sel.value = cur;
-    }
-
-    function populateSegments(segments) {
-        const sel = document.getElementById('h-segment');
-        const cur = sel.value;
-        const list = segments && segments.length ? segments : ['GLOBAL_AVG'];
-        sel.innerHTML = list.map(s => `<option value="${s}">${s}</option>`).join('');
-        if (list.includes(cur)) sel.value = cur;
-    }
-
-    function hideResults() {
-        ['stats-result','matrix-result','symptoms-result','ai-result'].forEach(id => show(document.getElementById(id), false));
-    }
-
-    function displayAnalysis(data) {
-        hideResults();
-        document.getElementById('fmt-badge').textContent = data.cswl_format || '';
-        if (data.sections) populateSectionSelect(data.sections);
-
-        if (data.mode === 'vertical') {
-            fillStatsTable(data.vertical_subsection_stats);
-            document.getElementById('compact-v').textContent = data.compact_diagnostics || '';
-            const titles = {
-                top_changes: 'Top clinical % changes',
-                heatmap: 'Heatmap — % change',
-                pct_bars: 'Band bars (subsection)',
-                subsection_cmp: 'Subsection comparison',
-                trajectory: 'Z trajectory',
-                channel_scatter: 'Channel detail',
-            };
-            renderPlotlyCharts(document.getElementById('charts-vertical'), data.charts, titles);
-            show(document.getElementById('stats-result'), true);
+    function renderOverview(data){
+        const container = document.getElementById("tab-overview");
+        if(data.mode === "vertical"){
+            const rows = data.vertical_subsection_stats || [];
+            const pct = rows.map(r => toNum(r.pct_change)).filter(v => v !== null);
+            const abnormal = rows.map(r => toNum(r.abnormal_set2_pct)).filter(v => v !== null);
+            const top = [...rows].filter(r => toNum(r.pct_change)!==null).sort((a,b)=>Math.abs(toNum(b.pct_change))-Math.abs(toNum(a.pct_change))).slice(0,8);
+            container.innerHTML = `
+                <div class="status-cards">
+                    <div class="card"><div class="card-k">Rows</div><div class="card-v mono">${rows.length}</div></div>
+                    <div class="card"><div class="card-k">Mean % change</div><div class="card-v mono">${fmt(avg(pct),2)}%</div></div>
+                    <div class="card"><div class="card-k">Median % change</div><div class="card-v mono">${fmt(median(pct),2)}%</div></div>
+                    <div class="card"><div class="card-k">Avg abnormal EO%</div><div class="card-v mono">${fmt(avg(abnormal),1)}</div></div>
+                </div>
+                <h3 style="margin:14px 0 8px;font-size:14px;">Top absolute changes</h3>
+                <div class="table-wrap"><table><thead><tr><th>Section</th><th>Subsection</th><th>Band</th><th>% change</th></tr></thead><tbody>
+                ${top.map(r => `<tr><td>${escapeHtml(r.section||"")}</td><td>${escapeHtml(r.subsection||"")}</td><td>${escapeHtml(r.band||"")}</td><td class="mono">${fmt(toNum(r.pct_change),2)}%</td></tr>`).join("")}
+                </tbody></table></div>
+            `;
+        } else {
+            const matrix = data.horizontal_matrix || [];
+            const symptoms = data.symptom_results || [];
+            const nt = data.neurotrack_table_rows || [];
+            container.innerHTML = `
+                <div class="status-cards">
+                    <div class="card"><div class="card-k">Matrix rows</div><div class="card-v mono">${matrix.length}</div></div>
+                    <div class="card"><div class="card-k">NeuroTrack rows</div><div class="card-v mono">${nt.length}</div></div>
+                    <div class="card"><div class="card-k">Symptom matches</div><div class="card-v mono">${symptoms.length}</div></div>
+                    <div class="card"><div class="card-k">Top symptom score</div><div class="card-v mono">${symptoms.length ? fmt(Math.max(...symptoms.map(s => toNum(s.score) || 0)),1) : "-"}</div></div>
+                </div>
+                <h3 style="margin:14px 0 8px;font-size:14px;">Symptom patterns</h3>
+                ${symptoms.length ? symptoms.map(s => `<div class="card" style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;"><strong>${escapeHtml(s.name || "Unknown")}</strong><span class="chip warn mono">${fmt(toNum(s.score),1)}/10</span></div><div class="subtle" style="margin-top:5px;">${escapeHtml(s.description || "")}</div></div>`).join("") : '<div class="subtle">No symptom pattern above threshold.</div>'}
+            `;
         }
+    }
 
-        if (data.mode === 'horizontal') {
-            if (data.segments) populateSegments(data.segments);
-            fillMatrix(data.horizontal_matrix);
-            fillNtTable(data.neurotrack_table_rows);
-            document.getElementById('compact-h').textContent = data.compact_diagnostics || '';
-            const titles = { trajectory: 'EC → EO trajectory', symptoms: 'Symptom scores' };
-            renderPlotlyCharts(document.getElementById('charts-horizontal'), data.charts, titles);
-            show(document.getElementById('matrix-result'), true);
-            if (data.symptom_results && data.symptom_results.length) {
-                fillSymptoms(data.symptom_results);
-                show(document.getElementById('symptoms-result'), true);
+    function renderStats(data){
+        const container = document.getElementById("tab-stats");
+        if(data.mode === "vertical"){
+            const rows = data.vertical_subsection_stats || [];
+            const pct = rows.map(r=>toNum(r.pct_change)).filter(v=>v!==null);
+            const ecAbn = rows.map(r=>toNum(r.abnormal_set1_pct)).filter(v=>v!==null);
+            const eoAbn = rows.map(r=>toNum(r.abnormal_set2_pct)).filter(v=>v!==null);
+            const bySection = {};
+            for (const r of rows){
+                const sec = r.section || "UNKNOWN";
+                bySection[sec] = bySection[sec] || {n:0,p:[]};
+                const v = toNum(r.pct_change);
+                if(v!==null) bySection[sec].p.push(v);
+                bySection[sec].n += 1;
             }
-        }
-
-        if (data.report_markdown) {
-            document.getElementById('ai-body').innerHTML = renderMarkdown(data.report_markdown);
-            show(document.getElementById('ai-result'), true);
+            const secRows = Object.entries(bySection).map(([k,v]) => ({section:k, n:v.n, mean:avg(v.p), sd:stdev(v.p)})).sort((a,b)=>Math.abs(b.mean)-Math.abs(a.mean));
+            container.innerHTML = `
+                <div class="status-cards">
+                    <div class="card"><div class="card-k">Sample rows</div><div class="card-v mono">${rows.length}</div></div>
+                    <div class="card"><div class="card-k">Pct SD</div><div class="card-v mono">${fmt(stdev(pct),2)}</div></div>
+                    <div class="card"><div class="card-k">EC abnormal mean</div><div class="card-v mono">${fmt(avg(ecAbn),2)}</div></div>
+                    <div class="card"><div class="card-k">EO abnormal mean</div><div class="card-v mono">${fmt(avg(eoAbn),2)}</div></div>
+                </div>
+                <h3 style="margin:14px 0 8px;font-size:14px;">Section-level comparative statistics</h3>
+                <div class="table-wrap"><table><thead><tr><th>Section</th><th>Rows</th><th>Mean % change</th><th>SD</th></tr></thead><tbody>
+                    ${secRows.map(r => `<tr><td>${escapeHtml(r.section)}</td><td class="mono">${r.n}</td><td class="mono">${fmt(r.mean,2)}%</td><td class="mono">${fmt(r.sd,2)}</td></tr>`).join("")}
+                </tbody></table></div>
+                <p class="subtle" style="margin-top:8px;">Statistical analyses shown: descriptive summary, dispersion (SD), and section-wise comparative means over EC vs EO changes.</p>
+            `;
+        } else {
+            const matrix = data.horizontal_matrix || [];
+            const nt = data.neurotrack_table_rows || [];
+            const means = matrix.map(r => toNum(r.mean)).filter(v=>v!==null);
+            const abn = matrix.map(r => toNum(r.abnormal_rate_pct)).filter(v=>v!==null);
+            container.innerHTML = `
+                <div class="status-cards">
+                    <div class="card"><div class="card-k">Matrix entries</div><div class="card-v mono">${matrix.length}</div></div>
+                    <div class="card"><div class="card-k">Mean value avg</div><div class="card-v mono">${fmt(avg(means),2)}</div></div>
+                    <div class="card"><div class="card-k">Abnormal % avg</div><div class="card-v mono">${fmt(avg(abn),2)}</div></div>
+                    <div class="card"><div class="card-k">Trajectory rows</div><div class="card-v mono">${nt.length}</div></div>
+                </div>
+                <h3 style="margin:14px 0 8px;font-size:14px;">Horizontal distribution stats</h3>
+                <div class="table-wrap"><table><thead><tr><th>Label</th><th>Mean</th><th>SD</th><th>Median</th><th>IQR</th><th>Abnormal %</th></tr></thead><tbody>
+                    ${matrix.slice(0,200).map(r => `<tr><td>${escapeHtml(r.label || "")}</td><td class="mono">${fmt(toNum(r.mean),2)}</td><td class="mono">${fmt(toNum(r.sd),2)}</td><td class="mono">${fmt(toNum(r.median),2)}</td><td class="mono">${fmt(toNum(r.iqr),2)}</td><td class="mono">${fmt(toNum(r.abnormal_rate_pct),2)}</td></tr>`).join("")}
+                </tbody></table></div>
+                <p class="subtle" style="margin-top:8px;">Statistical analyses shown: distribution parameters per segment/band and abnormal-rate comparisons.</p>
+            `;
         }
     }
 
-    async function loadHealth() {
+    function renderTables(data){
+        const container = document.getElementById("tab-tables");
+        if(data.mode === "vertical"){
+            const rows = data.vertical_subsection_stats || [];
+            container.innerHTML = `<div class="toolbar"><button class="btn btn-ghost" id="btn-export-table">Export CSV</button></div>
+                <div class="table-wrap"><table><thead><tr><th>Section</th><th>Subsection</th><th>Band</th><th>Set1 Mean</th><th>Set2 Mean</th><th>% Change</th><th>Abn EC%</th><th>Abn EO%</th></tr></thead><tbody>
+                ${rows.map(r => `<tr><td>${escapeHtml(r.section||"")}</td><td>${escapeHtml(r.subsection||"")}</td><td>${escapeHtml(r.band||"")}</td><td class="mono">${fmt(toNum(r.set1_mean_abs),3)}</td><td class="mono">${fmt(toNum(r.set2_mean_abs),3)}</td><td class="mono">${fmt(toNum(r.pct_change),2)}%</td><td class="mono">${fmt(toNum(r.abnormal_set1_pct),2)}</td><td class="mono">${fmt(toNum(r.abnormal_set2_pct),2)}</td></tr>`).join("")}
+                </tbody></table></div>`;
+            document.getElementById("btn-export-table").onclick = () => downloadText("vertical_stats.csv", csvFromRows(rows));
+        } else {
+            const matrix = data.horizontal_matrix || [];
+            const nt = data.neurotrack_table_rows || [];
+            container.innerHTML = `
+                <div class="toolbar">
+                    <button class="btn btn-ghost" id="btn-export-matrix">Export Matrix CSV</button>
+                    <button class="btn btn-ghost" id="btn-export-nt">Export NeuroTrack CSV</button>
+                </div>
+                <h3 style="margin:0 0 8px;font-size:14px;">Horizontal Matrix</h3>
+                <div class="table-wrap" style="margin-bottom:12px;"><table><thead><tr>${matrix.length ? Object.keys(matrix[0]).map(k=>"<th>"+escapeHtml(k)+"</th>").join("") : "<th>No rows</th>"}</tr></thead><tbody>
+                    ${matrix.map(r => "<tr>"+Object.keys(r).map(k=>'<td class=\"mono\">'+escapeHtml(r[k])+"</td>").join("")+"</tr>").join("")}
+                </tbody></table></div>
+                <h3 style="margin:0 0 8px;font-size:14px;">NeuroTrack Rows</h3>
+                <div class="table-wrap"><table><thead><tr>${nt.length ? Object.keys(nt[0]).map(k=>"<th>"+escapeHtml(k)+"</th>").join("") : "<th>No rows</th>"}</tr></thead><tbody>
+                    ${nt.map(r => "<tr>"+Object.keys(r).map(k=>'<td class=\"mono\">'+escapeHtml(r[k])+"</td>").join("")+"</tr>").join("")}
+                </tbody></table></div>`;
+            document.getElementById("btn-export-matrix").onclick = () => downloadText("horizontal_matrix.csv", csvFromRows(matrix));
+            document.getElementById("btn-export-nt").onclick = () => downloadText("neurotrack_rows.csv", csvFromRows(nt));
+        }
+    }
+
+    function renderDiagnostics(data){
+        digestText.textContent = data.compact_diagnostics || "No diagnostics available.";
+    }
+
+    function renderMeta(data){
+        const rows = data.mode === "vertical" ? (data.vertical_subsection_stats || []).length : (data.horizontal_matrix || []).length;
+        const charts = Object.keys(data.charts || {}).length;
+        document.getElementById("result-meta").innerHTML = `
+            <div class="status-cards">
+                <div class="card"><div class="card-k">Mode</div><div class="card-v mono" style="font-size:14px;">${escapeHtml(data.mode || "-")}</div></div>
+                <div class="card"><div class="card-k">Rows</div><div class="card-v mono">${rows}</div></div>
+                <div class="card"><div class="card-k">Charts</div><div class="card-v mono">${charts}</div></div>
+                <div class="card"><div class="card-k">Sections</div><div class="card-v mono">${(data.sections || []).length}</div></div>
+            </div>
+        `;
+    }
+
+    function displayAnalysis(data){
+        currentData = data;
+        show(placeholder,false);
+        show(resultShell,true);
+        fmtChip.textContent = data.cswl_format || "-";
+        fmtChip.classList.add("chip");
+        renderMeta(data);
+        populateSections(data.sections || []);
+        populateSegments(data.segments || []);
+        document.getElementById("ai-body").innerHTML = data.report_markdown ? mdToHtml(data.report_markdown) : '<p class="subtle">No AI report generated yet. Use "Run Statistics + AI" or "AI Report Only".</p>';
+        renderOverview(data);
+        renderStats(data);
+        renderTables(data);
+        renderDiagnostics(data);
+        buildChartPicker(data.charts || {}, data.mode);
+        renderTab("overview");
+    }
+
+    async function loadHealth(){
         try {
-            const r = await fetch(base() + '/health');
-            const d = await r.json();
+            const d = await fetch(base() + "/health", {cache:"no-store"}).then(r => r.json());
             geminiOk = !!d.gemini_configured;
-            document.getElementById('health-line').textContent =
-                (geminiOk ? 'Gemini: configured' : 'Gemini: not set (add GEMINI_API_KEY on Render)') +
-                ' · ' + (d.s3_configured ? 'S3: on' : 'S3: off');
-            btnFull.disabled = !filesReady() || !geminiOk;
-            btnAi.disabled = !filesReady() || !geminiOk;
-        } catch (_) {}
+            healthLine.textContent = (geminiOk ? "Gemini: configured" : "Gemini: not configured") + " | " + (d.s3_configured ? "S3: on" : "S3: off");
+        } catch (_) {
+            healthLine.textContent = "Health check unavailable.";
+        }
+        btnAnalyze.disabled = !filesReady();
+        btnFull.disabled = !filesReady() || !geminiOk;
+        btnAi.disabled = !filesReady() || !geminiOk;
     }
 
-    modeSel.addEventListener('change', () => {
-        const h = modeSel.value === 'horizontal';
-        show(hOpts, h);
-        show(vChartOpts, !h);
+    async function runEndpoint(path){
+        if(!filesReady()){ setError("Please select both EC and EO files."); return; }
+        clearError();
+        setBusy(true);
+        show(resultShell,false);
+        try {
+            const res = await fetch(base() + path, {method:"POST", body: analysisForm()});
+            const data = await res.json();
+            if(!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+            displayAnalysis(data);
+        } catch (e) {
+            setError(e.message || String(e));
+            show(placeholder,true);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => renderTab(tab.dataset.tab)));
+    modeSel.addEventListener("change", () => {
+        const isH = modeSel.value === "horizontal";
+        show(hOpts,isH);
+        show(vOpts,!isH);
     });
-    [ecInput, eoInput].forEach(inp => inp.addEventListener('change', () => {
+    [ecInput,eoInput].forEach(i => i.addEventListener("change", () => {
         btnAnalyze.disabled = !filesReady();
         btnFull.disabled = !filesReady() || !geminiOk;
         btnAi.disabled = !filesReady() || !geminiOk;
     }));
 
-    btnProcess.addEventListener('click', async () => {
-        if (!filesReady()) { alert('Select EC and EO CSWL files.'); return; }
-        show(placeholder, false); show(errorEl, false); show(document.getElementById('process-result'), false);
-        setBusy(true);
+    btnProcess.addEventListener("click", async () => {
+        if(!filesReady()){ setError("Please select EC and EO CSWL files."); return; }
+        clearError(); setBusy(true); show(processResult,false);
         try {
-            const res = await fetch(base() + '/extraction', { method: 'POST', body: formFiles() });
+            const res = await fetch(base() + "/extraction", {method:"POST", body: formFiles()});
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || res.statusText);
-            const docUrl = data.doc_url && data.doc_url.startsWith('http') ? data.doc_url : base() + data.doc_url;
-            const zipUrl = data.url && data.url.startsWith('http') ? data.url : (data.url ? base() + data.url : '');
-            document.getElementById('process-msg').innerHTML =
-                `<p>Format: <strong>${data.cswl_format}</strong></p>
-                 <p><a href="${docUrl}" target="_blank" rel="noopener">Download metrics DOCX</a></p>` +
-                (zipUrl ? `<p><a href="${zipUrl}" target="_blank" rel="noopener">Download ZIP</a></p>` : '') +
-                (data.note ? `<p style="font-size:12px;margin-top:8px;">${data.note}</p>` : '');
-            show(document.getElementById('process-result'), true);
+            if(!res.ok) throw new Error(data.detail || res.statusText);
+            const docUrl = data.doc_url && data.doc_url.startsWith("http") ? data.doc_url : base() + data.doc_url;
+            const zipUrl = data.url ? (data.url.startsWith("http") ? data.url : base() + data.url) : "";
+            document.getElementById("process-msg").innerHTML = `<div>Format: <strong>${escapeHtml(data.cswl_format || "-")}</strong></div><div style="margin-top:6px;"><a href="${docUrl}" target="_blank" rel="noopener">Download metrics DOCX</a></div>${zipUrl ? `<div style="margin-top:4px;"><a href="${zipUrl}" target="_blank" rel="noopener">Download ZIP</a></div>` : ""}`;
+            show(processResult,true);
         } catch (e) {
-            errorEl.textContent = e.message || String(e);
-            show(errorEl, true);
-            show(placeholder, true);
-        } finally { setBusy(false); }
+            setError(e.message || String(e));
+        } finally {
+            setBusy(false);
+        }
     });
 
-    async function runAnalyze(url) {
-        if (!filesReady()) return;
-        show(placeholder, false); show(errorEl, false);
-        hideResults();
-        setBusy(true);
+    btnAnalyze.addEventListener("click", () => runEndpoint("/api/analyze"));
+    btnFull.addEventListener("click", () => runEndpoint("/api/run-full-analysis"));
+    btnAi.addEventListener("click", async () => {
+        if(!filesReady()){ setError("Please select EC and EO CSWL files."); return; }
+        clearError(); setBusy(true);
         try {
-            const res = await fetch(base() + url, { method: 'POST', body: analysisForm() });
+            const res = await fetch(base() + "/api/ai-report", {method:"POST", body: analysisForm()});
             const data = await res.json();
-            if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
-            displayAnalysis(data);
-        } catch (e) {
-            errorEl.textContent = e.message || String(e);
-            show(errorEl, true);
-            show(placeholder, true);
-        } finally { setBusy(false); }
-    }
-
-    btnAnalyze.addEventListener('click', () => runAnalyze('/api/analyze'));
-    btnFull.addEventListener('click', () => runAnalyze('/api/run-full-analysis'));
-
-    btnAi.addEventListener('click', async () => {
-        if (!filesReady()) return;
-        show(placeholder, false); show(errorEl, false);
-        setBusy(true);
-        try {
-            const res = await fetch(base() + '/api/ai-report', { method: 'POST', body: analysisForm() });
-            const data = await res.json();
-            if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
-            document.getElementById('ai-body').innerHTML = renderMarkdown(data.report_markdown || '');
-            show(document.getElementById('ai-result'), true);
-        } catch (e) {
-            errorEl.textContent = e.message || String(e);
-            show(errorEl, true);
-        } finally { setBusy(false); }
+            if(!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+            const aiHtml = mdToHtml(data.report_markdown || "");
+            if (!show(resultShell,true), currentData) {
+                currentData.report_markdown = data.report_markdown || "";
+                document.getElementById("ai-body").innerHTML = aiHtml || "<p>No AI report.</p>";
+                renderTab("ai");
+            } else {
+                show(placeholder,false);
+                show(resultShell,true);
+                document.getElementById("ai-body").innerHTML = aiHtml || "<p>No AI report.</p>";
+                renderTab("ai");
+            }
+        } catch(e){
+            setError(e.message || String(e));
+        } finally {
+            setBusy(false);
+        }
     });
 
+    chartPicker.addEventListener("change", () => { currentChartKey = chartPicker.value; renderCurrentChart(); });
+    document.getElementById("btn-chart-png").addEventListener("click", () => {
+        if (!currentChartKey) return;
+        Plotly.downloadImage("plot-main", {format:"png", filename:"qeeg_"+currentData.mode+"_"+currentChartKey, width:1600, height:900, scale:1});
+    });
+    document.getElementById("btn-chart-json").addEventListener("click", () => {
+        if (!currentChartKey || !chartMap[currentChartKey]) return;
+        downloadText("qeeg_"+currentData.mode+"_"+currentChartKey+".json", JSON.stringify(chartMap[currentChartKey], null, 2));
+    });
+    document.getElementById("btn-chart-fullscreen").addEventListener("click", () => {
+        plotMain.style.height = plotMain.style.height === "78vh" ? "520px" : "78vh";
+        if (currentChartKey) renderCurrentChart();
+    });
+
+    document.getElementById("btn-digest-copy").addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(digestText.textContent || ""); } catch (_) {}
+    });
+    document.getElementById("btn-digest-txt").addEventListener("click", () => downloadText("qeeg_diagnostics.txt", digestText.textContent || ""));
+
+    modeSel.dispatchEvent(new Event("change"));
     loadHealth();
-    modeSel.dispatchEvent(new Event('change'));
-    populateSectionSelect([]);
 })();
 </script>
 </body>
