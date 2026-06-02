@@ -349,6 +349,8 @@
     function titleMap(mode){
         if(mode === "vertical"){
             return {
+                band_radar: "Band Radar (EC vs EO)",
+                subsection_radar: "Subsection Radar (EC vs EO)",
                 top_changes: "Top Clinical % Changes",
                 heatmap: "Heatmap - Percent Change",
                 pct_bars: "Band Bars (Selected Subsection)",
@@ -357,7 +359,11 @@
                 channel_scatter: "Channel Detail"
             };
         }
-        return { trajectory: "EC -> EO Trajectory", symptoms: "Symptom Scores" };
+        return {
+            matrix_radar: "Matrix Radar (EC vs EO)",
+            trajectory: "EC -> EO Trajectory",
+            symptoms: "Symptom Scores"
+        };
     }
 
     function buildChartPicker(charts, mode){
@@ -381,12 +387,13 @@
         const fig = chartMap[currentChartKey];
         const titles = titleMap(currentData.mode);
         const layout = Object.assign({}, PLOTLY_LAYOUT, fig.layout || {}, { title: titles[currentChartKey] || currentChartKey });
+        const isRadar = (fig.data || []).some(t => String(t.type || "").includes("scatterpolar"));
         Plotly.newPlot("plot-main", fig.data || [], layout, {
             responsive: true,
             displayModeBar: true,
             displaylogo: false,
-            scrollZoom: true,
-            modeBarButtonsToAdd: ["toImage"]
+            scrollZoom: !isRadar,
+            modeBarButtonsToAdd: ["toImage", "zoom2d", "pan2d", "resetScale2d"]
         });
     }
 

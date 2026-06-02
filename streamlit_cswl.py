@@ -23,11 +23,14 @@ from cswl_pipeline import (
     secure_cswl_filename,
 )
 from qeeg_charts import (
+    fig_band_radar,
     fig_channel_sparkline,
     fig_heatmap_pct_change,
+    fig_matrix_radar,
     fig_neurotrack_trajectory,
     fig_pct_change_bars,
     fig_subsection_comparison,
+    fig_subsection_radar,
     fig_symptom_scores,
     fig_top_clinical_changes,
     fig_z_trajectory,
@@ -466,13 +469,32 @@ def _render_horizontal_clinical(pkg) -> None:
                                 )
 
         if df is not None and subsection != "ALL":
+            sec_stats = stats[stats["section"] == section] if not stats.empty else stats
             st.plotly_chart(
-                fig_subsection_comparison(
-                    stats[stats["section"] == section] if not stats.empty else stats,
-                    band,
-                ),
+                fig_subsection_comparison(sec_stats, band),
                 use_container_width=True,
             )
+            if not sec_stats.empty:
+                st.plotly_chart(
+                    fig_band_radar(
+                        stats,
+                        section=section,
+                        subsection=subsection,
+                        ec_label=ec_l,
+                        eo_label=eo_l,
+                    ),
+                    use_container_width=True,
+                )
+                st.plotly_chart(
+                    fig_subsection_radar(
+                        stats,
+                        section=section,
+                        band=band,
+                        ec_label=ec_l,
+                        eo_label=eo_l,
+                    ),
+                    use_container_width=True,
+                )
             st.plotly_chart(
                 fig_channel_sparkline(df, band, subsection, ec_l, eo_l),
                 use_container_width=True,
@@ -513,6 +535,12 @@ def _render_vertical_neurotrack(pkg) -> None:
                     band=band,
                     set_labels=[ec_l, eo_l],
                 ),
+                use_container_width=True,
+            )
+
+        if not pkg.horizontal_matrix.empty:
+            st.plotly_chart(
+                fig_matrix_radar(pkg.horizontal_matrix, ec_label=ec_l, eo_label=eo_l),
                 use_container_width=True,
             )
 

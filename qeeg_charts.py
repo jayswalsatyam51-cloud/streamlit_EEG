@@ -163,6 +163,167 @@ def fig_heatmap_pct_change(stats_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
+def fig_band_radar(
+    stats_df: pd.DataFrame,
+    *,
+    section: str,
+    subsection: str,
+    ec_label: str = "EC",
+    eo_label: str = "EO",
+) -> go.Figure:
+    """Radar profile: mean |Z| by band for EC vs EO (one subsection)."""
+    work = stats_df.copy()
+    if "section" in work.columns and section:
+        work = work[work["section"] == section]
+    work = work[work["subsection"] == subsection]
+    if work.empty:
+        return go.Figure()
+    work = _order_bands(work, "band")
+    theta = work["band"].astype(str).tolist()
+    r_ec = work["set1_mean_abs"].astype(float).tolist()
+    r_eo = work["set2_mean_abs"].astype(float).tolist()
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatterpolar(
+            r=r_ec,
+            theta=theta,
+            fill="toself",
+            fillcolor="rgba(37,99,235,0.15)",
+            line=dict(color="#2563eb", width=2),
+            name=ec_label,
+        )
+    )
+    fig.add_trace(
+        go.Scatterpolar(
+            r=r_eo,
+            theta=theta,
+            fill="toself",
+            fillcolor="rgba(219,39,119,0.15)",
+            line=dict(color="#db2777", width=2),
+            name=eo_label,
+        )
+    )
+    fig.update_layout(
+        title=f"Band radar — {subsection}",
+        template="plotly_white",
+        height=460,
+        polar=dict(
+            radialaxis=dict(visible=True, gridcolor="#e2e8f0"),
+            angularaxis=dict(gridcolor="#e2e8f0"),
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05),
+        margin=dict(l=60, r=60, t=70, b=40),
+    )
+    return fig
+
+
+def fig_subsection_radar(
+    stats_df: pd.DataFrame,
+    *,
+    section: str,
+    band: str,
+    ec_label: str = "EC",
+    eo_label: str = "EO",
+) -> go.Figure:
+    """Radar profile: mean |Z| by subsection (LEFT/RIGHT/CENTER) for one band."""
+    work = stats_df.copy()
+    if "section" in work.columns and section:
+        work = work[work["section"] == section]
+    work = work[work["band"] == band]
+    if work.empty:
+        return go.Figure()
+    order = ["LEFT", "RIGHT", "CENTER"]
+    work["subsection"] = pd.Categorical(work["subsection"], categories=order, ordered=True)
+    work = work.sort_values("subsection")
+    theta = work["subsection"].astype(str).tolist()
+    r_ec = work["set1_mean_abs"].astype(float).tolist()
+    r_eo = work["set2_mean_abs"].astype(float).tolist()
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatterpolar(
+            r=r_ec,
+            theta=theta,
+            fill="toself",
+            fillcolor="rgba(37,99,235,0.15)",
+            line=dict(color="#2563eb", width=2),
+            name=ec_label,
+        )
+    )
+    fig.add_trace(
+        go.Scatterpolar(
+            r=r_eo,
+            theta=theta,
+            fill="toself",
+            fillcolor="rgba(219,39,119,0.15)",
+            line=dict(color="#db2777", width=2),
+            name=eo_label,
+        )
+    )
+    fig.update_layout(
+        title=f"Subsection radar — {band}",
+        template="plotly_white",
+        height=460,
+        polar=dict(
+            radialaxis=dict(visible=True, gridcolor="#e2e8f0"),
+            angularaxis=dict(gridcolor="#e2e8f0"),
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05),
+        margin=dict(l=60, r=60, t=70, b=40),
+    )
+    return fig
+
+
+def fig_matrix_radar(
+    matrix_df: pd.DataFrame,
+    *,
+    ec_label: str = "EC",
+    eo_label: str = "EO",
+) -> go.Figure:
+    """Radar profile from horizontal matrix (bands/segments vs set means)."""
+    if matrix_df.empty or "set_1" not in matrix_df.columns or "set_2" not in matrix_df.columns:
+        return go.Figure()
+    work = matrix_df.head(14).copy()
+    theta = work["label"].astype(str).tolist()
+    r_ec = [float(v) if v is not None and pd.notna(v) else 0.0 for v in work["set_1"]]
+    r_eo = [float(v) if v is not None and pd.notna(v) else 0.0 for v in work["set_2"]]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatterpolar(
+            r=r_ec,
+            theta=theta,
+            fill="toself",
+            fillcolor="rgba(37,99,235,0.15)",
+            line=dict(color="#2563eb", width=2),
+            name=ec_label,
+        )
+    )
+    fig.add_trace(
+        go.Scatterpolar(
+            r=r_eo,
+            theta=theta,
+            fill="toself",
+            fillcolor="rgba(219,39,119,0.15)",
+            line=dict(color="#db2777", width=2),
+            name=eo_label,
+        )
+    )
+    fig.update_layout(
+        title="EC vs EO profile (horizontal matrix)",
+        template="plotly_white",
+        height=480,
+        polar=dict(
+            radialaxis=dict(visible=True, gridcolor="#e2e8f0"),
+            angularaxis=dict(gridcolor="#e2e8f0"),
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05),
+        margin=dict(l=60, r=60, t=70, b=40),
+    )
+    return fig
+
+
 def fig_subsection_comparison(stats_df: pd.DataFrame, band: str) -> go.Figure:
     """Grouped bar: EC vs EO mean |Z| per subsection for one band."""
     work = stats_df[stats_df["band"] == band].copy()
