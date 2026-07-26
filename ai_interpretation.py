@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -26,6 +28,31 @@ GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={api_key}"
 )
+
+# Transient statuses worth retrying: rate limit + server overload/unavailable.
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+# Generous retry budget so transient overloads self-heal without user action.
+_MAX_RETRY_SECONDS = float(os.getenv("GEMINI_MAX_RETRY_SECONDS", "180"))
+_MAX_BACKOFF_SECONDS = float(os.getenv("GEMINI_MAX_BACKOFF_SECONDS", "20"))
+_BASE_BACKOFF_SECONDS = 1.5
+
+
+def _parse_retry_after(resp: requests.Response) -> Optional[float]:
+    """Return server-suggested wait (seconds) from Retry-After header, if present."""
+    header = resp.headers.get("Retry-After")
+    if not header:
+        return None
+    try:
+        return float(header)
+    except (TypeError, ValueError):
+        return None
+
+
+def _backoff_delay(attempt: int, retry_after: Optional[float]) -> float:
+    if retry_after is not None and retry_after >= 0:
+        return min(retry_after, _MAX_BACKOFF_SECONDS)
+    delay = min(_BASE_BACKOFF_SECONDS * (2 ** attempt), _MAX_BACKOFF_SECONDS)
+    return delay + random.uniform(0, 0.75)
 
 
 def _strip_limitations_section(text: str) -> str:
@@ -102,13 +129,54 @@ def invoke_gemini_analysis(prompt: str) -> str:
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.7, "topP": 0.95},
     }
-    resp = requests.post(url, json=body, timeout=120)
-    if not resp.ok:
+
+    started = time.monotonic()
+    attempt = 0
+    last_transient_msg = "Gemini API is temporarily overloaded or rate limited."
+
+    while True:
+        try:
+            resp = requests.post(url, json=body, timeout=120)
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            # Network hiccups are transient — keep retrying within the budget.
+            if time.monotonic() - started >= _MAX_RETRY_SECONDS:
+                raise ValueError(
+                    "Gemini API is temporarily unreachable. Please try again shortly."
+                ) from exc
+            time.sleep(_backoff_delay(attempt, None))
+            attempt += 1
+            continue
+
+        if resp.ok:
+            text = _extract_text(resp.json())
+            if not text:
+                raise ValueError("Gemini API returned empty analysis text")
+            return _strip_limitations_section(text)
+
+        # Retry only for transient overload / rate-limit / server errors.
+        if resp.status_code in _RETRYABLE_STATUS:
+            last_transient_msg = (
+                "Gemini API is temporarily overloaded or your project hit a rate "
+                "limit."
+            )
+            if time.monotonic() - started >= _MAX_RETRY_SECONDS:
+                raise ValueError(
+                    f"{last_transient_msg} Retried for "
+                    f"{int(_MAX_RETRY_SECONDS)}s without success — please try again later."
+                )
+            delay = _backoff_delay(attempt, _parse_retry_after(resp))
+            logger.warning(
+                "Gemini transient error %s (attempt %s); retrying in %.1fs",
+                resp.status_code,
+                attempt + 1,
+                delay,
+            )
+            time.sleep(delay)
+            attempt += 1
+            continue
+
+        # Any other error is surfaced immediately.
         raise ValueError(f"Gemini API error: {resp.status_code} {resp.text[:400]}")
-    text = _extract_text(resp.json())
-    if not text:
-        raise ValueError("Gemini API returned empty analysis text")
-    return _strip_limitations_section(text)
 
 
 def generate_analysis_report(
